@@ -1,0 +1,10 @@
+{
+  "domain": "skylight_calendar",
+  "name": "Skylight Calendar",
+  "version": "0.1.0",
+  "documentation": "https://github.com/MegaTheLEGEND/skylight_calendar",
+  "requirements": ["requests"],
+  "codeowners": ["@MegaTheLEGEND"],
+  "integration_type": "hub",
+  "config_flow": true
+}
