@@ -1,4 +1,5 @@
 DOMAIN = "skylight_calendar"
-CONF_PASSWORD = "Authentication Code"
+CONF_USERNAME = "Username"
+CONF_PASSWORD = "Password"
 BASE_URL = "https://app.ourskylight.com/api"
 CONF_FRAME_ID = "Frame ID"
