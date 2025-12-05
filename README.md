@@ -11,7 +11,7 @@ Integrate skylight calendar into home assistant
 
 # Setup
 
--log into your skylight account using your username and password.
+- log into the integration using your skylight account with your username and password.
 - Log into https://ourskylight.com
 - Open the calendar you wish to add. 
 - The url contains your Frame ID. https://ourskylight.com/calendar/`XXXXXXX`
