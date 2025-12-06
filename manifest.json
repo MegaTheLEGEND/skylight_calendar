@@ -1,7 +1,11 @@
 {
   "domain": "skylight_calendar",
   "name": "Skylight Calendar",
+<<<<<<< Updated upstream
   "version": "0.1.1",
+=======
+  "version": "1.0.0",
+>>>>>>> Stashed changes
   "documentation": "https://github.com/MegaTheLEGEND/skylight_calendar",
   "requirements": ["requests"],
   "codeowners": ["@MegaTheLEGEND"],
