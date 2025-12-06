@@ -1,4 +1,4 @@
-"""Skylight integration initialization."""
+"""setup skylight_calendar integration."""
 
 import logging
 
@@ -7,45 +7,22 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr
 
 from .api import SkylightAPI
-<<<<<<< Updated upstream
-from .const import CONF_FRAME_ID, CONF_PASSWORD, CONF_USERNAME, DOMAIN
-=======
 from .const import DOMAIN
->>>>>>> Stashed changes
 
 _LOGGER = logging.getLogger(__name__)
 PLATFORMS = ["calendar"]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
-<<<<<<< Updated upstream
-    username = entry.data.get("username") or entry.data.get(CONF_USERNAME)
-    frame_id = entry.data.get("frame_id") or entry.data.get(CONF_FRAME_ID)
-    password = entry.data.get("password") or entry.data.get(CONF_PASSWORD)
-    auth_code = entry.data.get("auth_code")
-=======
     auth_code = entry.data.get("auth_code")
     stored_frames = entry.data.get("frame_data", [])
->>>>>>> Stashed changes
 
     if not auth_code:
         _LOGGER.error("Skylight auth_code missing — cannot load integration")
         return False
 
-<<<<<<< Updated upstream
-    api = SkylightAPI(
-        {
-            "frame_id": frame_id,
-            "username": username,
-            "password": password,
-            "auth_code": auth_code,
-        },
-        hass=hass,
-    )
-=======
     api = SkylightAPI({"auth_code": auth_code}, hass=hass)
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {"api": api}
->>>>>>> Stashed changes
 
     # Fetch live frames from Skylight API
 

@@ -18,10 +18,6 @@ class SkylightAPI:
     def __init__(self, entry_data: Mapping, hass=None):
         """Initialize with config entry data (MappingProxyType or dict)."""
         self.auth_code = entry_data.get("auth_code")
-<<<<<<< Updated upstream
-        self.frame_id = entry_data.get("frame_id")
-=======
->>>>>>> Stashed changes
         self._hass = hass  # optional, needed to get HA timezone
 
     def get_headers(self) -> dict:
