@@ -6,7 +6,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
 from .api import SkylightAPI
-from .const import CONF_FRAME_ID, CONF_PASSWORD, DOMAIN
+from .const import CONF_FRAME_ID, CONF_PASSWORD, CONF_USERNAME, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -14,14 +14,24 @@ PLATFORMS = ["calendar"]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
+    username = entry.data.get("username") or entry.data.get(CONF_USERNAME)
     frame_id = entry.data.get("frame_id") or entry.data.get(CONF_FRAME_ID)
-    auth_code = entry.data.get("password") or entry.data.get(CONF_PASSWORD)
+    password = entry.data.get("password") or entry.data.get(CONF_PASSWORD)
+    auth_code = entry.data.get("auth_code")
 
     if frame_id is None or auth_code is None:
         _LOGGER.error("Skylight config entry missing required data: %s", entry.data)
         return False
 
-    api = SkylightAPI({"frame_id": frame_id, "password": auth_code}, hass=hass)
+    api = SkylightAPI(
+        {
+            "frame_id": frame_id,
+            "username": username,
+            "password": password,
+            "auth_code": auth_code,
+        },
+        hass=hass,
+    )
 
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = {
