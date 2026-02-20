@@ -3,7 +3,7 @@ Integrate skylight calendar into home assistant
 
 NOTE - I only own one Skylight frame. In theory this integration should work with multiple, I havent tested it.
 
-# Install Hacs
+# Install with Hacs
 
 1) add this repository to your hacs instance. `https://github.com/MegaTheLEGEND/skylight_calendar`
 or use this button:
