@@ -13,7 +13,7 @@ or use this button:
 2) click download
 3) Restart Home Assistant
 
-# Install Manual
+# Install Manually
 
 1) Put these files into the `custom_components/skylight_calendar` folder in home assistant.
 2) Restart Home assistant. 
