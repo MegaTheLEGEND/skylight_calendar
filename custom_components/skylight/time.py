@@ -12,6 +12,7 @@ from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import DOMAIN
+from .buddy import SkylightBuddyEntity, add_new_entities, parse_hhmm
 from .entity import SkylightDeviceEntity
 
 _LOGGER = logging.getLogger(__name__)
@@ -50,6 +51,15 @@ async def async_setup_entry(
         for description in TIMES
     )
 
+    buddy = data["buddy_coordinator"]
+    add_new_entities(
+        buddy,
+        async_add_entities,
+        lambda did, aid: [SkylightAlarmTime(buddy, data["frame_id"], did, aid)]
+        if aid
+        else [],
+    )
+
 
 class SkylightDeviceTime(SkylightDeviceEntity, TimeEntity):
     """A wall-clock setting on the device, sent as ``HH:MM``."""
@@ -74,4 +84,24 @@ class SkylightDeviceTime(SkylightDeviceEntity, TimeEntity):
     async def async_set_value(self, value: dt_time) -> None:
         # The frame reports "22:00" / "07:30", so match that precision rather
         # than sending the seconds HA's picker supplies.
+        await self._async_patch(value.strftime("%H:%M"))
+
+
+class SkylightAlarmTime(SkylightBuddyEntity, TimeEntity):
+    """Time of one Buddy alarm, sent as ``HH:MM``."""
+
+    _attr_icon = "mdi:alarm"
+
+    def __init__(self, coordinator, frame_id, device_id, alarm_id) -> None:
+        super().__init__(coordinator, frame_id, device_id, "time", alarm_id)
+
+    @property
+    def name(self) -> str:
+        return f"{self._alarm_label} alarm time"
+
+    @property
+    def native_value(self) -> dt_time | None:
+        return parse_hhmm(self._raw_value)
+
+    async def async_set_value(self, value: dt_time) -> None:
         await self._async_patch(value.strftime("%H:%M"))

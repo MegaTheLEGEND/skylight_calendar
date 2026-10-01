@@ -389,6 +389,33 @@ class SkylightAPI:
             json_body=attributes,
         )
 
+    async def get_alarms(self, frame_id: str, device_id: str) -> list[dict]:
+        """Alarms on a Buddy, as ``{id, attributes}``.
+
+        Only the collection route exists — ``GET .../alarms/{id}`` is a 404.
+        """
+        resp = await self._request(
+            "GET", f"/api/frames/{frame_id}/devices/{device_id}/alarms"
+        )
+        return [
+            {"id": str(a.get("id")), "attributes": a.get("attributes", {}) or {}}
+            for a in resp.get("data", [])
+            if a.get("id") is not None
+        ]
+
+    async def patch_alarm(
+        self, frame_id: str, device_id: str, alarm_id: str, attributes: dict
+    ) -> dict:
+        """PATCH an alarm (enabled, time "HH:MM", label, volume, rrule, …).
+
+        Flat body like ``patch_device``; an ``{"alarm": {...}}`` wrapper is a 500.
+        """
+        return await self._request(
+            "PATCH",
+            f"/api/frames/{frame_id}/devices/{device_id}/alarms/{alarm_id}",
+            json_body=attributes,
+        )
+
     async def get_calendar_events(
         self, frame_id: str, date_min: str, date_max: str, timezone: str = "UTC"
     ) -> dict:

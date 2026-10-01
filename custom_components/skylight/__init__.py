@@ -41,6 +41,7 @@ from .const import (
     PLATFORM_TODO,
     SCAN_INTERVAL_OPTIONS,
 )
+from .buddy import SkylightBuddyCoordinator
 from .coordinator import (
     SkylightCalendarCoordinator,
     SkylightFrameCoordinator,
@@ -116,6 +117,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     photos_coord = SkylightPhotosCoordinator(
         hass, api, frame_id, _interval(CONF_PHOTOS_INTERVAL)
     )
+    buddy_coord = SkylightBuddyCoordinator(
+        hass, api, frame_id, _interval(CONF_FRAME_INTERVAL)
+    )
 
     await calendar_coord.async_config_entry_first_refresh()
     await lists_coord.async_config_entry_first_refresh()
@@ -126,6 +130,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         await photos_coord.async_config_entry_first_refresh()
     except Exception:  # noqa: BLE001
         _LOGGER.debug("Initial photos refresh failed — continuing without photos")
+    # Buddies are optional too; their entities appear on a later refresh.
+    try:
+        await buddy_coord.async_config_entry_first_refresh()
+    except Exception:  # noqa: BLE001
+        _LOGGER.debug("Initial Buddy refresh failed — continuing without Buddies")
 
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
         "api": api,
@@ -136,6 +145,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "sensor_coordinator": sensor_coord,
         "frame_coordinator": frame_coord,
         "photos_coordinator": photos_coord,
+        "buddy_coordinator": buddy_coord,
     }
 
     device_registry = dr.async_get(hass)
