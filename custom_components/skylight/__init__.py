@@ -176,6 +176,7 @@ SERVICE_CREATE_CHORE = "create_chore"
 SERVICE_CREATE_TASK = "create_task"
 SERVICE_CREATE_LIST = "create_list"
 SERVICE_DELETE_LIST = "delete_list"
+SERVICE_DELETE_CHORE = "delete_chore"
 SERVICE_CREATE_REWARD = "create_reward"
 SERVICE_REDEEM_REWARD = "redeem_reward"
 SERVICE_CREATE_RECIPE = "create_recipe"
@@ -205,11 +206,14 @@ UPLOAD_MEDIA_SCHEMA = vol.Schema(
 )
 
 def _has_assignee(data: dict) -> dict:
-    """Skylight 422s a chore with no category, so don't let the call through."""
+    """A normal chore needs an assignee; an up-for-grabs chore is
+    intentionally unassigned, so the requirement is skipped in that case."""
+    if data.get("up_for_grabs"):
+        return data
     if not data.get("assignees") and not data.get("category_ids"):
         raise vol.Invalid(
             "A chore needs an assignee: pass assignees (family member names) "
-            "or category_ids (raw IDs)."
+            "or category_ids (raw IDs), unless up_for_grabs is true."
         )
     return data
 
@@ -256,6 +260,10 @@ CREATE_LIST_SCHEMA = vol.Schema(
 
 DELETE_LIST_SCHEMA = vol.Schema(
     {vol.Required("list_id"): cv.string, **_FRAME_ID_FIELD}
+)
+
+DELETE_CHORE_SCHEMA = vol.Schema(
+    {vol.Required("chore_id"): cv.string, **_FRAME_ID_FIELD}
 )
 
 CREATE_REWARD_SCHEMA = vol.Schema(
@@ -411,6 +419,13 @@ async def _delete_list(api: SkylightAPI, frame_id: str, data: Mapping[str, Any])
     await api.delete_list(frame_id, data["list_id"])
 
 
+async def _delete_chore(api: SkylightAPI, frame_id: str, data: Mapping[str, Any]) -> None:
+    """Delete a chore outright — the only supported way to remove an
+    up-for-grabs chore, since it has no assignee and so never appears in a
+    per-member todo list (todo.remove_item has nothing to target)."""
+    await api.delete_chore(frame_id, data["chore_id"])
+
+
 async def _create_reward(api: SkylightAPI, frame_id: str, data: Mapping[str, Any]) -> None:
     await api.create_reward(
         frame_id,
@@ -457,6 +472,7 @@ _WRITE_SERVICES: tuple[tuple[str, vol.Schema, str, ServiceAction], ...] = (
     (SERVICE_CREATE_TASK, CREATE_TASK_SCHEMA, "sensor_coordinator", _create_task),
     (SERVICE_CREATE_LIST, CREATE_LIST_SCHEMA, "lists_coordinator", _create_list),
     (SERVICE_DELETE_LIST, DELETE_LIST_SCHEMA, "lists_coordinator", _delete_list),
+    (SERVICE_DELETE_CHORE, DELETE_CHORE_SCHEMA, "sensor_coordinator", _delete_chore),
     (SERVICE_CREATE_REWARD, CREATE_REWARD_SCHEMA, "sensor_coordinator", _create_reward),
     (SERVICE_REDEEM_REWARD, REDEEM_REWARD_SCHEMA, "sensor_coordinator", _redeem_reward),
     (SERVICE_CREATE_RECIPE, CREATE_RECIPE_SCHEMA, "sensor_coordinator", _create_recipe),

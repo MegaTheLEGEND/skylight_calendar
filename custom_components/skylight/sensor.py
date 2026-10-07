@@ -33,6 +33,7 @@ async def async_setup_entry(
 
     entities: list[SensorEntity] = [
         SkylightChoresTodaySensor(coord, frame_id, frame_name),
+        SkylightAllChoresSensor(coord, frame_id, frame_name),
         SkylightMealsTodaySensor(coord, frame_id, frame_name),
     ]
 
@@ -334,6 +335,40 @@ class SkylightChoresTodaySensor(_SkylightBaseSensor):
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         chores = self._today_chores()
+        cat_map = _category_label_map(self.coordinator.data or {})
+        return {
+            "chores": [_enrich_chore(c, cat_map) for c in chores],
+            "by_status": _status_breakdown(chores),
+        }
+
+
+class SkylightAllChoresSensor(_SkylightBaseSensor):
+    """Every chore in the coordinator's cached window (today through +7 days),
+    unfiltered by date.
+
+    Unlike ``Chores today``, this also surfaces chores whose ``start`` date has
+    already passed — the underlying ``get_chores`` call always asks Skylight
+    for ``include_late=true``, so overdue-but-incomplete chores are already in
+    ``coordinator.data``, just filtered out by the "today" sensors' own
+    date check. That matters most for up-for-grabs chores: they carry no
+    single assignee, so there is no per-member sensor or todo entity that
+    would otherwise surface them once their date is in the past.
+    """
+
+    _attr_name = "All chores"
+    _attr_icon = "mdi:clipboard-list"
+
+    def __init__(self, coordinator, frame_id, frame_name):
+        super().__init__(coordinator, frame_id, frame_name)
+        self._attr_unique_id = f"skylight_{frame_id}_all_chores"
+
+    @property
+    def native_value(self) -> int:
+        return len(_chore_entries(self.coordinator.data or {}))
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        chores = _chore_entries(self.coordinator.data or {})
         cat_map = _category_label_map(self.coordinator.data or {})
         return {
             "chores": [_enrich_chore(c, cat_map) for c in chores],
