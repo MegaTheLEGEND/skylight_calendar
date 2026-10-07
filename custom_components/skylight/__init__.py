@@ -11,10 +11,11 @@ from typing import Any
 
 import voluptuous as vol
 
+from homeassistant.auth.permissions.const import POLICY_CONTROL
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, ServiceCall
-from homeassistant.exceptions import HomeAssistantError
-from homeassistant.helpers import config_validation as cv, device_registry as dr
+from homeassistant.exceptions import HomeAssistantError, Unauthorized, UnknownUser
+from homeassistant.helpers import config_validation as cv, device_registry as dr, entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.util import dt as dt_util
 
@@ -461,6 +462,34 @@ _WRITE_SERVICES: tuple[tuple[str, vol.Schema, str, ServiceAction], ...] = (
 _ALL_SERVICES = (SERVICE_UPLOAD_MEDIA, *(name for name, *_ in _WRITE_SERVICES))
 
 
+async def _async_authorize_frame_write(
+    hass: HomeAssistant, call: ServiceCall, frame_id: str
+) -> None:
+    """Require control of the selected frame's aggregate calendar.
+
+    HA's generic service dispatch preserves user context but does not enforce
+    entity permissions for domain services. Context-free trusted automations
+    retain their existing behavior. Media upload additionally needs an admin.
+    """
+    if not call.context.user_id:
+        return
+    user = await hass.auth.async_get_user(call.context.user_id)
+    if user is None:
+        raise UnknownUser(context=call.context)
+    if not user.is_active:
+        raise Unauthorized(context=call.context)
+    if call.service == SERVICE_UPLOAD_MEDIA:
+        if not user.is_admin:
+            raise Unauthorized(context=call.context)
+        return
+    registry = er.async_get(hass)
+    entity_id = registry.async_get_entity_id(
+        "calendar", DOMAIN, f"skylight_{frame_id}_calendar"
+    )
+    if entity_id is None or not user.permissions.check_entity(entity_id, POLICY_CONTROL):
+        raise Unauthorized(context=call.context)
+
+
 def _make_write_handler(
     hass: HomeAssistant, coordinator_key: str, action: ServiceAction
 ):
@@ -468,6 +497,7 @@ def _make_write_handler(
 
     async def _handler(call: ServiceCall) -> None:
         entry_data = _resolve_entry(hass, call.data.get("frame_id"))
+        await _async_authorize_frame_write(hass, call, entry_data["frame_id"])
         try:
             await action(entry_data["api"], entry_data["frame_id"], call.data)
         except SkylightAPIError as err:
@@ -491,6 +521,7 @@ def _async_register_services(hass: HomeAssistant) -> None:
         caption = call.data.get("caption", "") or ""
 
         entry_data = _resolve_entry(hass, call.data.get("frame_id"))
+        await _async_authorize_frame_write(hass, call, entry_data["frame_id"])
         api: SkylightAPI = entry_data["api"]
         frame_id: str = entry_data["frame_id"]
 
