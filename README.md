@@ -32,6 +32,18 @@ Full [Skylight Calendar Frame](https://www.ourskylight.com/) integration for Hom
 
 Entities are only created for settings your frame actually reports — Skylight's device payload varies by hardware, and an absent key means "unsupported here" rather than "off". A handful of settings (`sleep_mode`, `nightlight_color`, `sleep_sound`, `slideshow_style`) are exposed as read-only diagnostic sensors rather than selects, because only one value of each enum has ever been observed and a guessed option list would produce controls that fail.
 
+### Skylight Buddy
+
+A Buddy paired to the frame (a second device with `role: buddy`) gets its own HA device, named as in the app:
+
+| HA Platform | Entities | Notes |
+|---|---|---|
+| `switch` | night light; one `<label> alarm` per alarm | The alarm switch enables or disables that alarm. Its attributes carry `time`, `rrule`, `fires_on`, `sound`, `volume` and `snoozable`. |
+| `number` | night light brightness, sleep sound volume; `<label> alarm volume` per alarm | |
+| `time` | `<label> alarm time` per alarm | Sent as `HH:MM`. |
+
+Alarms come from `/api/frames/{fid}/devices/{did}/alarms`. Alarms created in the app appear on the next frame poll. A Buddy's `wakes_at` / `sleeps_at` are separate from its alarms (they read `null` on a Buddy).
+
 ### Sensor entities
 
 | Entity | Native value | Attributes |

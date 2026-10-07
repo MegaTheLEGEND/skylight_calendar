@@ -13,6 +13,7 @@ from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import DOMAIN
+from .buddy import SkylightBuddyEntity, add_new_entities
 from .entity import SkylightDeviceEntity
 
 _LOGGER = logging.getLogger(__name__)
@@ -91,6 +92,15 @@ async def async_setup_entry(
         for description in SWITCHES
     )
 
+    buddy = data["buddy_coordinator"]
+
+    def _buddy_entities(device_id: str, alarm_id: str | None) -> list:
+        if alarm_id:
+            return [SkylightAlarmSwitch(buddy, data["frame_id"], device_id, alarm_id)]
+        return [SkylightBuddySwitch(buddy, data["frame_id"], device_id, "nightlight")]
+
+    add_new_entities(buddy, async_add_entities, _buddy_entities)
+
 
 class SkylightDeviceSwitch(SkylightDeviceEntity, SwitchEntity):
     entity_description: SkylightSwitchDescription
@@ -118,3 +128,40 @@ class SkylightDeviceSwitch(SkylightDeviceEntity, SwitchEntity):
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         await self._async_patch(False)
+
+
+class SkylightBuddySwitch(SkylightBuddyEntity, SwitchEntity):
+    """Buddy night light."""
+
+    _attr_name = "Night light"
+    _attr_icon = "mdi:weather-night"
+
+    @property
+    def is_on(self) -> bool | None:
+        raw = self._raw_value
+        return None if raw is None else bool(raw)
+
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        await self._async_patch(True)
+
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        await self._async_patch(False)
+
+
+class SkylightAlarmSwitch(SkylightBuddySwitch):
+    """Enable/disable one Buddy alarm."""
+
+    _attr_icon = "mdi:alarm"
+
+    def __init__(self, coordinator, frame_id, device_id, alarm_id) -> None:
+        super().__init__(coordinator, frame_id, device_id, "enabled", alarm_id)
+
+    @property
+    def name(self) -> str:
+        return f"{self._alarm_label} alarm"
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        src = self._source or {}
+        return {k: src.get(k) for k in ("time", "rrule", "fires_on", "sound",
+                                        "volume", "snoozable")}
