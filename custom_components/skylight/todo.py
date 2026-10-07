@@ -351,10 +351,12 @@ class SkylightMemberChoreTodo(
         if item.status is not None:
             want_complete = item.status == TodoItemStatus.COMPLETED
             if want_complete != _chore_is_complete(attrs):
-                # Which occurrence is being ticked: the date in the uid, else
-                # the chore's own ``start`` day. An on-demand chore has neither
-                # and must send no date at all — see :meth:`complete_chore`.
-                instance_date = occurrence or (attrs.get("start") or "")[:10] or None
+                # Which occurrence is being ticked: the composite UID date, or
+                # None for bare-UID chores. The API requires instance_date to be
+                # absent for bare-UID chores even when start is set — the
+                # composite UID format is the sole signal that instance_date is
+                # needed.
+                instance_date = occurrence
                 if want_complete:
                     # The frame files completions by calendar day, so use HA's
                     # local date rather than UTC.
