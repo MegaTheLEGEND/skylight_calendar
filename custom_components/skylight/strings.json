@@ -3,9 +3,24 @@
     "step": {
       "user": {
         "title": "Sign in to Skylight",
+        "description": "Choose how Home Assistant should sign in to your Skylight account.",
+        "menu_options": {
+          "browser": "Sign in with your browser (paste the code)",
+          "refresh_token": "Use a refresh token"
+        }
+      },
+      "browser": {
+        "title": "Sign in to Skylight",
         "description": "1. [Open Skylight sign-in]({auth_url}) in a new tab.\n2. Sign in with your Skylight email and password.\n3. When the page finishes loading, look at your browser's address bar — it will contain `?code=…`.\n4. Copy the value of `code` (or the whole URL — either works) and paste it below.",
         "data": {
           "code": "Authorization code"
+        }
+      },
+      "refresh_token": {
+        "title": "Sign in with a refresh token",
+        "description": "Paste a Skylight refresh token. Unlike the sign-in code, it doesn't expire within seconds, so you can get it first and paste it here later.\n\nYou can paste the token on its own, or the saved sign-in data copied from the Skylight web app's developer tools (Application → Local Storage → auth-storage). That includes the device id the token belongs to, which Home Assistant needs to keep using it. Any access token in the pasted text is ignored.",
+        "data": {
+          "refresh_token": "Refresh token"
         }
       },
       "pick_frame": {
@@ -20,7 +35,9 @@
       "cannot_connect": "Couldn't reach the Skylight API. Try again in a moment.",
       "invalid_auth": "That code was rejected — codes expire in about 30 seconds. Click the link again to get a fresh one.",
       "invalid_code": "That doesn't look like a Skylight authorization code. Paste the value of `code=` from the address bar (or the whole URL).",
-      "no_frames": "No Skylight frames were found on this account."
+      "no_frames": "No Skylight frames were found on this account.",
+      "invalid_token": "That doesn't look like a refresh token. Paste the token on its own, or the whole saved sign-in data (it must include the refresh token).",
+      "invalid_auth_token": "Skylight rejected that refresh token. It may have been used up or revoked; sign in again to get a new one."
     },
     "abort": {
       "already_configured": "This Skylight frame is already configured.",

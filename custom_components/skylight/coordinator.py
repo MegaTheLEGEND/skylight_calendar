@@ -6,6 +6,7 @@ from datetime import timedelta
 import logging
 
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
 
@@ -51,7 +52,9 @@ class SkylightCalendarCoordinator(DataUpdateCoordinator):
                 self.frame_id, date_min, date_max, timezone=tz
             )
         except SkylightAuthError as err:
-            raise UpdateFailed(f"Auth failed: {err}") from err
+            # Starts Home Assistant's re-authentication flow instead of silently
+            # leaving every entity unavailable.
+            raise ConfigEntryAuthFailed(f"Auth failed: {err}") from err
         except SkylightAPIError as err:
             raise UpdateFailed(str(err)) from err
 
@@ -117,7 +120,9 @@ class SkylightListsCoordinator(DataUpdateCoordinator):
         try:
             lists_resp = await self.api.get_lists(self.frame_id)
         except SkylightAuthError as err:
-            raise UpdateFailed(f"Auth failed: {err}") from err
+            # Starts Home Assistant's re-authentication flow instead of silently
+            # leaving every entity unavailable.
+            raise ConfigEntryAuthFailed(f"Auth failed: {err}") from err
         except SkylightAPIError as err:
             raise UpdateFailed(str(err)) from err
 
@@ -291,7 +296,9 @@ class SkylightFrameCoordinator(DataUpdateCoordinator):
         try:
             devices = await self.api.get_devices(self.frame_id)
         except SkylightAuthError as err:
-            raise UpdateFailed(f"Auth failed: {err}") from err
+            # Starts Home Assistant's re-authentication flow instead of silently
+            # leaving every entity unavailable.
+            raise ConfigEntryAuthFailed(f"Auth failed: {err}") from err
         except SkylightAPIError as err:
             raise UpdateFailed(str(err)) from err
 
@@ -331,7 +338,9 @@ class SkylightPhotosCoordinator(DataUpdateCoordinator):
         try:
             resp = await self.api.get_messages(self.frame_id)
         except SkylightAuthError as err:
-            raise UpdateFailed(f"Auth failed: {err}") from err
+            # Starts Home Assistant's re-authentication flow instead of silently
+            # leaving every entity unavailable.
+            raise ConfigEntryAuthFailed(f"Auth failed: {err}") from err
         except SkylightAPIError as err:
             # Photos are non-critical — don't kill the whole entry over this.
             _LOGGER.debug("photos fetch failed: %s", err)

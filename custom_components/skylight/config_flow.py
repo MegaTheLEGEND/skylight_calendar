@@ -30,6 +30,7 @@ from .api import (
     SkylightAPIError,
     SkylightAuthError,
     exchange_authorization_code,
+    exchange_refresh_token,
 )
 from .const import (
     CONF_ACCESS_TOKEN,
@@ -46,6 +47,7 @@ from .const import (
     OAUTH_SCOPE,
     SCAN_INTERVAL_OPTIONS,
 )
+from .token_input import parse_token_input
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -107,9 +109,19 @@ class SkylightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._frames: list[dict] = []
         self._reauth_entry: ConfigEntry | None = None
 
-    # ── Primary user step ────────────────────────────────────────────────
+    # ── Sign-in method ───────────────────────────────────────────────────
 
     async def async_step_user(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Choose how to sign in. Reauth and reconfigure start here too."""
+        return self.async_show_menu(
+            step_id="user", menu_options=["browser", "refresh_token"]
+        )
+
+    # ── Method 1: sign in with the browser, paste the code ───────────────
+
+    async def async_step_browser(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
         errors: dict[str, str] = {}
@@ -144,36 +156,98 @@ class SkylightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 else:
                     self._access_token = tokens["access_token"]
                     self._refresh_token = tokens["refresh_token"]
-
-                    if self._reauth_entry is not None:
-                        return await self._finish_reauth()
-
-                    api = SkylightAPI(
-                        session=session,
-                        access_token=self._access_token,
-                        refresh_token=self._refresh_token,
-                        device_fingerprint=self._device_fingerprint,
-                    )
-                    try:
-                        self._frames = await api.get_frames()
-                    except SkylightAPIError:
-                        _LOGGER.exception("Failed to enumerate frames")
-                        errors["base"] = "cannot_connect"
-
-                    if not errors:
-                        if not self._frames:
-                            errors["base"] = "no_frames"
-                        elif len(self._frames) == 1:
-                            return await self._create_entry(self._frames[0])
-                        else:
-                            return await self.async_step_pick_frame()
+                    result, error = await self._async_after_tokens(session)
+                    if result is not None:
+                        return result
+                    errors["base"] = error or "cannot_connect"
 
         return self.async_show_form(
-            step_id="user",
+            step_id="browser",
             data_schema=vol.Schema({vol.Required(CONF_CODE): str}),
             description_placeholders={"auth_url": auth_url},
             errors=errors,
         )
+
+    # ── Method 2: paste a refresh token ──────────────────────────────────
+
+    async def async_step_refresh_token(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Sign in with a refresh token obtained elsewhere (no timing pressure).
+
+        Unlike an authorization code, a refresh token does not expire within
+        seconds, so it can be produced by a companion app or tool and pasted later.
+        """
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            try:
+                refresh_token, fingerprint = parse_token_input(
+                    user_input.get(CONF_REFRESH_TOKEN, "")
+                )
+            except ValueError:
+                errors[CONF_REFRESH_TOKEN] = "invalid_token"
+            else:
+                session = async_get_clientsession(self.hass)
+                # Keep the supplied fingerprint: the token may be tied to it.
+                self._device_fingerprint = fingerprint or secrets.token_hex(16)
+                try:
+                    tokens = await exchange_refresh_token(
+                        session,
+                        refresh_token=refresh_token,
+                        device_fingerprint=self._device_fingerprint,
+                    )
+                except SkylightAuthError as err:
+                    _LOGGER.warning("Refresh token sign-in failed: %s", err)
+                    errors["base"] = "invalid_auth_token"
+                except SkylightAPIError:
+                    _LOGGER.exception("Skylight OAuth token endpoint error")
+                    errors["base"] = "cannot_connect"
+                else:
+                    self._access_token = tokens["access_token"]
+                    # Skylight may rotate the refresh token; always keep the new one.
+                    self._refresh_token = tokens["refresh_token"]
+                    result, error = await self._async_after_tokens(session)
+                    if result is not None:
+                        return result
+                    errors["base"] = error or "cannot_connect"
+
+        return self.async_show_form(
+            step_id="refresh_token",
+            data_schema=vol.Schema({vol.Required(CONF_REFRESH_TOKEN): str}),
+            errors=errors,
+        )
+
+    # ── Shared: what happens once tokens are in hand ─────────────────────
+
+    async def _async_after_tokens(
+        self, session
+    ) -> tuple[FlowResult | None, str | None]:
+        """Finish reauth, or list frames and create the entry.
+
+        Returns ``(result, None)`` to hand back to the flow, or ``(None, error_key)``
+        to show the form again with an error.
+        """
+        if self._reauth_entry is not None:
+            return await self._finish_reauth(), None
+
+        api = SkylightAPI(
+            session=session,
+            access_token=self._access_token,
+            refresh_token=self._refresh_token,
+            device_fingerprint=self._device_fingerprint,
+        )
+        try:
+            self._frames = await api.get_frames()
+        except SkylightAPIError:
+            _LOGGER.exception("Failed to enumerate frames")
+            return None, "cannot_connect"
+
+        if not self._frames:
+            return None, "no_frames"
+        if len(self._frames) == 1:
+            return await self._create_entry(self._frames[0]), None
+        return await self.async_step_pick_frame(), None
 
     # ── Frame selection ─────────────────────────────────────────────────
 

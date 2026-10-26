@@ -25,6 +25,12 @@ from homeassistant.util import dt as dt_util
 from .api import SkylightAPIError
 from .const import DOMAIN
 from .coordinator import SkylightCalendarCoordinator
+from .people import (
+    add_people_line,
+    event_people,
+    family_member_labels,
+    strip_people_line,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -84,6 +90,7 @@ def _parse_events(
 ) -> list[CalendarEvent]:
     """Parse Skylight event feed → CalendarEvent list, optionally filtered by source calendar."""
     events: list[CalendarEvent] = []
+    labels = family_member_labels(raw_events.get("included"))
     for ev in raw_events.get("data", []):
         attrs = ev.get("attributes", {})
         if source_id is not None:
@@ -116,7 +123,9 @@ def _parse_events(
                 start=start_dt,
                 end=end_dt,
                 summary=attrs.get("summary") or "Skylight Event",
-                description=attrs.get("description") or "",
+                description=add_people_line(
+                    attrs.get("description") or "", event_people(ev, labels)
+                ),
                 location=attrs.get("location") or "",
                 # uid is what HA hands back on update/delete, so it has to be the
                 # id Skylight addresses the event by.
@@ -142,7 +151,8 @@ def _to_skylight_fields(data: Mapping[str, Any]) -> dict:
     if "summary" in data:
         out["summary"] = data["summary"]
     if "description" in data:
-        out["description"] = data["description"] or ""
+        # Drop the generated "People:" line so it never lands in the Skylight event.
+        out["description"] = strip_people_line(data["description"])
     if "location" in data:
         out["location"] = data["location"] or ""
     if (start := data.get("dtstart")) is not None:

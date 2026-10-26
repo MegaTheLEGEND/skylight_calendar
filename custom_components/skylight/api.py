@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Awaitable, Callable, Mapping
 import json as _json
 import logging
@@ -137,6 +138,22 @@ class SkylightAPIError(Exception):
     """Raised on non-401 HTTP failures."""
 
 
+# Statuses on which Skylight's token endpoint is saying the credential itself is
+# no good (invalid_grant, invalid_client, unauthorized). Anything else, such as a
+# 5xx or a 429, is the server being unavailable and says nothing about the
+# credential, so it must not be treated as "signed out" (that would ask the user
+# to sign in again over a brief outage).
+_OAUTH_REJECTED_STATUSES = frozenset({400, 401, 403})
+
+
+def _oauth_failure(what: str, status: int, body: str) -> Exception:
+    """The exception for a failed token request: auth error or transient API error."""
+    message = f"{what} failed ({status}): {body[:200]}"
+    if status in _OAUTH_REJECTED_STATUSES:
+        return SkylightAuthError(message)
+    return SkylightAPIError(message)
+
+
 def _compact(**fields: Any) -> dict:
     """Drop ``None`` fields — used where the API rejects explicit nulls."""
     return {k: v for k, v in fields.items() if v is not None}
@@ -173,6 +190,10 @@ class SkylightAPI:
         self._refresh_token = refresh_token
         self._device_fingerprint = device_fingerprint or ""
         self._token_update_cb = token_update_cb
+        # Skylight rotates the refresh token on every use, so two concurrent
+        # refreshes with the same token would make the second one fail. Several
+        # coordinators poll on their own timers and can all see the same 401.
+        self._refresh_lock = asyncio.Lock()
         # GET url -> (etag, raw body), for the handful of getters marked
         # cacheable=True. The raw text is stored rather than the parsed object so
         # a caller can never mutate another poll's data.
@@ -197,9 +218,10 @@ class SkylightAPI:
         _retry: bool = True,
     ) -> Any:
         url = URL(f"{BASE_URL}{path}")
+        token_used = self._access_token
         headers = {
             "Accept": "application/json",
-            "Authorization": f"Bearer {self._access_token}",
+            "Authorization": f"Bearer {token_used}",
             "User-Agent": USER_AGENT,
             "Skylight-Api-Version": API_VERSION,
         }
@@ -242,7 +264,7 @@ class SkylightAPI:
                 raise SkylightAPIError(f"GET {path} → 304 without a cached body")
             if resp.status == 401 and _retry:
                 _LOGGER.debug("Skylight 401 on %s — refreshing token", path)
-                await self._refresh_access_token()
+                await self._refresh_access_token(stale_token=token_used)
                 return await self._request(
                     method,
                     path,
@@ -285,7 +307,20 @@ class SkylightAPI:
                 return {}
             return _json.loads(text)
 
-    async def _refresh_access_token(self) -> None:
+    async def _refresh_access_token(self, stale_token: str | None = None) -> None:
+        """Refresh the tokens, once even if several callers ask at the same time.
+
+        ``stale_token`` is the access token the failing request used. If another
+        caller has already replaced it while this one waited for the lock, the
+        work is done and the caller just retries with the new token.
+        """
+        async with self._refresh_lock:
+            if stale_token is not None and self._access_token != stale_token:
+                _LOGGER.debug("Skylight token already refreshed by another request")
+                return
+            await self._refresh_access_token_locked()
+
+    async def _refresh_access_token_locked(self) -> None:
         payload = {
             "grant_type": "refresh_token",
             "refresh_token": self._refresh_token,
@@ -312,9 +347,7 @@ class SkylightAPI:
         ) as resp:
             body = await resp.text()
             if resp.status != 200:
-                raise SkylightAuthError(
-                    f"OAuth refresh failed ({resp.status}): {body[:200]}"
-                )
+                raise _oauth_failure("OAuth refresh", resp.status, body)
             data = _json.loads(body)
 
         new_access = data.get("access_token")
@@ -422,7 +455,13 @@ class SkylightAPI:
         return await self._request(
             "GET",
             f"/api/frames/{frame_id}/calendar_events",
-            params={"date_min": date_min, "date_max": date_max, "timezone": timezone},
+            # include=categories adds the family-member tags (see people.py).
+            params={
+                "date_min": date_min,
+                "date_max": date_max,
+                "timezone": timezone,
+                "include": "categories",
+            },
         )
 
     async def create_calendar_event(
@@ -1068,7 +1107,7 @@ async def exchange_refresh_token(
     ) as resp:
         text = await resp.text()
         if resp.status != 200:
-            raise SkylightAuthError(f"Refresh exchange failed ({resp.status}): {text[:200]}")
+            raise _oauth_failure("Refresh exchange", resp.status, text)
         data = _json.loads(text)
     if not data.get("access_token"):
         raise SkylightAuthError(f"Refresh exchange: no access_token: {data}")
@@ -1121,9 +1160,7 @@ async def exchange_authorization_code(
     ) as resp:
         text = await resp.text()
         if resp.status != 200:
-            raise SkylightAuthError(
-                f"Authorization code exchange failed ({resp.status}): {text[:200]}"
-            )
+            raise _oauth_failure("Authorization code exchange", resp.status, text)
         data = _json.loads(text)
     if not data.get("access_token") or not data.get("refresh_token"):
         raise SkylightAuthError(f"Code exchange: missing tokens: {data}")

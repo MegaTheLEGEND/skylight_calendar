@@ -13,7 +13,7 @@ from datetime import time as dt_time, timedelta
 import logging
 from typing import Any
 
-from homeassistant.exceptions import HomeAssistantError
+from homeassistant.exceptions import ConfigEntryAuthFailed, HomeAssistantError
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import (
     CoordinatorEntity,
@@ -55,7 +55,9 @@ class SkylightBuddyCoordinator(DataUpdateCoordinator):
                 }
             return out
         except SkylightAuthError as err:
-            raise UpdateFailed(f"Auth failed: {err}") from err
+            # Starts Home Assistant's re-authentication flow instead of silently
+            # leaving every entity unavailable.
+            raise ConfigEntryAuthFailed(f"Auth failed: {err}") from err
         except SkylightAPIError as err:
             raise UpdateFailed(str(err)) from err
 

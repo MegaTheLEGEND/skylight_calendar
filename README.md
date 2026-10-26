@@ -231,6 +231,32 @@ entities:
   - calendar.slickfam_calendar
 ```
 
+### Who an event is for
+
+Skylight lets you tag an event with family members. Those tags are not in the iCloud or ICS
+export of the calendar, but they are in the Skylight API, so each calendar event's
+`description` ends with a line such as:
+
+```
+People: Ivy, Stella
+```
+
+Only family members count (calendar buckets like "US Holidays" don't). Use it in automations:
+
+```yaml
+triggers:
+  - trigger: calendar
+    entity_id: calendar.your_skylight_calendar
+    event: start
+    offset: "-0:20:0"
+conditions:
+  - condition: template
+    value_template: "{{ 'Stella' in trigger.calendar_event.description }}"
+```
+
+The line is added by Home Assistant only. It is removed again before a description is saved to
+Skylight, so editing an event in Home Assistant never copies it into the Skylight event.
+
 ---
 
 ## Automation examples
@@ -400,6 +426,46 @@ data:
 ## Authentication
 
 The config flow runs a normal OAuth2 authorization-code + PKCE grant. You'll be redirected to Skylight's sign-in page, log in with your Skylight credentials, and consent — HA takes it from there and stores the refresh token. On 401s it rotates automatically and persists the new pair back to the config entry. You should never need to redo this unless you revoke the grant server-side.
+
+### Two ways to sign in
+
+The first screen of the config flow asks how to sign in:
+
+1. **Sign in with your browser (paste the code).** The method described above. After you sign in,
+   Skylight sends the browser to `https://ourskylight.com/welcome?code=…`. That page is a
+   JavaScript app and may rewrite the address bar quickly, and the code is single-use and
+   short-lived, so copy it right away. Tip: opening the sign-in link in a private window and
+   having the browser developer tools open (Network tab, "Preserve log") shows the `code` even
+   if the page changes the address.
+2. **Use a refresh token.** Paste a refresh token you got elsewhere. A refresh token doesn't
+   expire within seconds, so there is no race. You can paste:
+   - the token on its own, or
+   - the saved sign-in data copied from the Skylight web app's developer tools (Application →
+     Local Storage → `auth-storage`), with or without the key in front. It contains the token and
+     the device id it was issued to (`uniqueId`). Home Assistant takes the refresh token and device
+     id from it and ignores the access token, or
+   - a small JSON object with `refresh_token` and `device_fingerprint` fields.
+
+   Send the device id along when you have it: Skylight may tie a token to the device it was
+   issued to. Home Assistant keeps whatever new refresh token Skylight returns.
+
+Re-authentication and reconfiguration use the same screen.
+
+### If Skylight signs Home Assistant out
+
+Skylight rotates the refresh token every time it is used, and Home Assistant saves the new one
+each time, so the daily token renewal needs no action. If Skylight rejects the saved token
+(you signed out everywhere, changed your password, or the grant was revoked), the integration
+asks Home Assistant to start re-authentication: Settings → Devices & services shows
+**Skylight: Re-authentication required**, and the same sign-in menu opens. Entities stay
+unavailable until you do.
+
+Temporary Skylight outages (server errors, rate limits) do not trigger this. The entities just
+become unavailable and recover on their own.
+
+Because refresh tokens are single-use, do not paste the same refresh token into Home Assistant
+and also keep using it in the Skylight web app: whichever uses it second is signed out. Sign in
+to the web app separately.
 
 ### Adding a second frame
 
