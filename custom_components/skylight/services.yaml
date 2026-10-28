@@ -105,6 +105,36 @@ create_chore:
         date: {}
     frame_id: *frame_id
 
+update_chore:
+  name: Update chore reward and emoji
+  description: >-
+    Change the supplied metadata on an existing chore series, including all
+    recurring occurrences. Does not complete the chore or award stars.
+  fields:
+    chore_id:
+      name: Chore series ID
+      description: Bare numeric series ID, without an occurrence date suffix.
+      required: true
+      example: "12345"
+      selector:
+        text: {}
+    emoji:
+      name: Emoji
+      description: Optional emoji; omit to preserve the existing icon.
+      example: 🧹
+      selector:
+        text: {}
+    reward_points:
+      name: Reward points
+      description: Optional star reward. Zero removes the reward; omit to preserve it.
+      example: 1
+      selector:
+        number:
+          min: 0
+          step: 1
+          mode: box
+    frame_id: *frame_id
+
 create_task:
   name: Create task
   description: >-

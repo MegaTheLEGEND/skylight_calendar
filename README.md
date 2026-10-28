@@ -296,6 +296,29 @@ action:
 
 ---
 
+## Editing chore rewards and emoji
+
+`skylight.update_chore` changes the star reward and/or emoji on an existing
+chore series. At least one of `reward_points` or `emoji` is required; omitted
+fields remain unchanged. Zero removes the star reward. It does not complete
+the chore or award stars.
+
+```yaml
+action: skylight.update_chore
+data:
+  chore_id: "12345"  # Replace with your own bare chore series ID.
+  emoji: 🧹
+  reward_points: 1
+```
+
+Find the chore ID in the chores sensor's attributes. For a recurring occurrence
+such as `12345-2026-11-04`, pass only `12345`; metadata applies to the series.
+Supply `frame_id` if more than one frame is configured. Creating a chore and
+editing its metadata are separate operations: if the edit fails, retry only the
+edit for the existing chore, not its creation.
+
+---
+
 ## Uploading photos & videos
 
 The integration exposes a `skylight.upload_media` service that pushes an image or short video to your frame — same path the mobile app uses (temp AWS credentials → SigV4-signed PUT to S3 → notification to Skylight).
@@ -346,6 +369,7 @@ Every service takes an optional `frame_id`, which is only required when you have
 |---|---|
 | `skylight.upload_media` | Push a photo or short video to the frame (see above). |
 | `skylight.create_chore` | Add a chore to the chore chart, assigned to one or more family members (required). Skylight creates one chore per assignee. |
+| `skylight.update_chore` | Edit the reward and emoji of an existing chore series without completing it. |
 | `skylight.create_task` | Add an unscheduled item to the Task Box for the frame to assign to a day later. |
 | `skylight.create_list` | Create a new shopping or to-do list. |
 | `skylight.delete_list` | Permanently delete a list and its items. |
