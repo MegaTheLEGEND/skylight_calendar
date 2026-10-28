@@ -105,6 +105,41 @@ create_chore:
         date: {}
     frame_id: *frame_id
 
+complete_chore:
+  name: Complete chore for a family member
+  description: >-
+    Complete a pending chore, including an up-for-grabs chore, and credit its
+    stars to one selected family member. Requires control of the selected frame.
+    The selected name is a credit recipient, not an authentication identity.
+  fields:
+    chore_id:
+      name: Chore ID
+      description: >-
+        Exact ID from a chores sensor. Preserve the date suffix for a recurring
+        occurrence. Do not add a date to a bare ID.
+      required: true
+      example: "12345-2026-11-04"
+      selector:
+        text: {}
+    assignee:
+      name: Family member name
+      description: Exact name, case-insensitive. Supply this or Family member ID, not both.
+      example: Alex
+      selector:
+        text: {}
+    category_id:
+      name: Family member ID
+      description: Existing linked family member on this frame; alternative to a name.
+      example: "67890"
+      selector:
+        text: {}
+    completed_on:
+      name: Completion date
+      description: Actual completion date, defaulting to today in Home Assistant's time zone.
+      selector:
+        date: {}
+    frame_id: *frame_id
+
 create_task:
   name: Create task
   description: >-

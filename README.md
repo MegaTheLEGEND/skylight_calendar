@@ -296,6 +296,37 @@ action:
 
 ---
 
+## Completing a chore for a selected family member
+
+`skylight.complete_chore` supports up-for-grabs chores as well as chores already
+assigned to the selected person. Pass the exact ID from a chores sensor and
+either an exact `assignee` name (case-insensitive) or a `category_id` linked to a
+family member on the selected frame. Ambiguous names and calendar-only categories
+are rejected. This chooses who receives credit; it does not authenticate them.
+The Home Assistant caller must independently have control of the selected frame.
+
+```yaml
+action: skylight.complete_chore
+data:
+  chore_id: "12345-2026-11-04"  # Replace with an actual occurrence ID.
+  assignee: Alex
+```
+
+For one-off chores, use the bare ID exactly as listed. Never append its due date.
+For recurring chores, retain the listed occurrence date even when completing it
+late. Optional `completed_on` is the actual completion day; otherwise HA's local
+date is used. Supply `frame_id` if multiple frames are configured.
+
+The action reads the current chore first and skips an already completed record.
+It does not reassign someone else's chore. A vendor/network failure is reported
+to the calling automation; there is no retry after an ambiguous timeout. Avoid
+parallel completion calls or blind retries: a remote app can change the chore
+between the read and write, and Skylight provides no transactional idempotency
+guarantee. Mobile automations must validate their authenticated action context
+and map users to configured family members rather than trusting button text.
+
+---
+
 ## Uploading photos & videos
 
 The integration exposes a `skylight.upload_media` service that pushes an image or short video to your frame — same path the mobile app uses (temp AWS credentials → SigV4-signed PUT to S3 → notification to Skylight).
@@ -346,6 +377,7 @@ Every service takes an optional `frame_id`, which is only required when you have
 |---|---|
 | `skylight.upload_media` | Push a photo or short video to the frame (see above). |
 | `skylight.create_chore` | Add a chore to the chore chart, assigned to one or more family members (required). Skylight creates one chore per assignee. |
+| `skylight.complete_chore` | Complete a pending chore for one exact family member, including up-for-grabs chores. |
 | `skylight.create_task` | Add an unscheduled item to the Task Box for the frame to assign to a day later. |
 | `skylight.create_list` | Create a new shopping or to-do list. |
 | `skylight.delete_list` | Permanently delete a list and its items. |

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable, Mapping
-from datetime import date
+from datetime import date, timedelta
 import logging
 import mimetypes
 from pathlib import Path
@@ -173,6 +173,7 @@ async def _async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
 
 SERVICE_UPLOAD_MEDIA = "upload_media"
 SERVICE_CREATE_CHORE = "create_chore"
+SERVICE_COMPLETE_CHORE = "complete_chore"
 SERVICE_CREATE_TASK = "create_task"
 SERVICE_CREATE_LIST = "create_list"
 SERVICE_DELETE_LIST = "delete_list"
@@ -238,6 +239,40 @@ CREATE_CHORE_SCHEMA = vol.All(
     ),
     _has_assignee,
 )
+
+
+def _has_completion_target(data: dict) -> dict:
+    """Validate exact chore identity and one explicit completion recipient."""
+    series_id, separator, occurrence = data["chore_id"].partition("-")
+    if not series_id.isascii() or not series_id.isdigit():
+        raise vol.Invalid("chore_id must contain a numeric series ID")
+    if separator:
+        try:
+            parsed = date.fromisoformat(occurrence)
+        except ValueError as err:
+            raise vol.Invalid("Occurrence date must be YYYY-MM-DD") from err
+        if parsed.isoformat() != occurrence:
+            raise vol.Invalid("Occurrence date must be YYYY-MM-DD")
+    if bool(data.get("assignee")) == bool(data.get("category_id")):
+        raise vol.Invalid("Supply exactly one of assignee or category_id")
+    if "assignee" in data and not data["assignee"].strip():
+        raise vol.Invalid("assignee must contain a family member name")
+    return data
+
+
+COMPLETE_CHORE_SCHEMA = vol.All(
+    vol.Schema(
+        {
+            vol.Required("chore_id"): cv.string,
+            vol.Optional("assignee"): vol.All(cv.string, vol.Length(min=1)),
+            vol.Optional("category_id"): vol.All(cv.string, vol.Length(min=1)),
+            vol.Optional("completed_on"): cv.date,
+            **_FRAME_ID_FIELD,
+        }
+    ),
+    _has_completion_target,
+)
+
 
 CREATE_TASK_SCHEMA = vol.Schema(
     {
@@ -399,6 +434,57 @@ async def _create_chore(api: SkylightAPI, frame_id: str, data: Mapping[str, Any]
     )
 
 
+async def _complete_chore(
+    api: SkylightAPI, frame_id: str, data: Mapping[str, Any]
+) -> None:
+    """Complete a fresh pending occurrence for one exact family member."""
+    members = [
+        c for c in (await api.get_categories(frame_id)).get("data", []) or []
+        if (c.get("attributes") or {}).get("linked_to_profile") and c.get("id")
+    ]
+    if "category_id" in data:
+        matches = [c for c in members if str(c["id"]) == data["category_id"]]
+    else:
+        wanted = data["assignee"].strip().casefold()
+        matches = [
+            c for c in members
+            if ((c.get("attributes") or {}).get("label") or "").strip().casefold()
+            == wanted
+        ]
+    if len(matches) != 1:
+        raise HomeAssistantError(
+            "Completion recipient must identify exactly one family member on this frame"
+        )
+    category_id = str(matches[0]["id"])
+    series_id, _, occurrence = data["chore_id"].partition("-")
+    completed_on = data.get("completed_on") or dt_util.now().date()
+    day = date.fromisoformat(occurrence) if occurrence else completed_on
+    payload = await api.get_chores(
+        frame_id, day.isoformat(), (day + timedelta(days=1)).isoformat()
+    )
+    chores = [
+        c for c in payload.get("data", []) or []
+        if str(c.get("id")) == data["chore_id"]
+    ]
+    if len(chores) != 1:
+        raise HomeAssistantError("Chore occurrence was not found; refresh its ID first")
+    attrs = chores[0].get("attributes") or {}
+    if attrs.get("status") in {"complete", "completed"} or attrs.get(
+        "completed_on"
+    ) or attrs.get("completed_at"):
+        return  # Do not award stars again or change an existing completion's owner.
+    if attrs.get("status") != "pending":
+        raise HomeAssistantError("Chore does not have a confirmed pending status")
+    category = (chores[0].get("relationships") or {}).get("category") or {}
+    assigned = (category.get("data") or {}).get("id") or attrs.get("category_id")
+    if not attrs.get("up_for_grabs") and str(assigned or "") != category_id:
+        raise HomeAssistantError("Chore is assigned to a different family member")
+    await api.complete_chore(
+        frame_id, series_id, completed_on.isoformat(), occurrence or None,
+        category_id=category_id,
+    )
+
+
 async def _create_task(api: SkylightAPI, frame_id: str, data: Mapping[str, Any]) -> None:
     await api.create_task_box_item(
         frame_id,
@@ -469,6 +555,7 @@ async def _add_recipe_to_grocery(
 # (service name, schema, coordinator to refresh afterwards, action)
 _WRITE_SERVICES: tuple[tuple[str, vol.Schema, str, ServiceAction], ...] = (
     (SERVICE_CREATE_CHORE, CREATE_CHORE_SCHEMA, "sensor_coordinator", _create_chore),
+    (SERVICE_COMPLETE_CHORE, COMPLETE_CHORE_SCHEMA, "sensor_coordinator", _complete_chore),
     (SERVICE_CREATE_TASK, CREATE_TASK_SCHEMA, "sensor_coordinator", _create_task),
     (SERVICE_CREATE_LIST, CREATE_LIST_SCHEMA, "lists_coordinator", _create_list),
     (SERVICE_DELETE_LIST, DELETE_LIST_SCHEMA, "lists_coordinator", _delete_list),
