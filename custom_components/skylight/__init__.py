@@ -173,6 +173,7 @@ async def _async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
 
 SERVICE_UPLOAD_MEDIA = "upload_media"
 SERVICE_CREATE_CHORE = "create_chore"
+SERVICE_UPDATE_CHORE = "update_chore"
 SERVICE_CREATE_TASK = "create_task"
 SERVICE_CREATE_LIST = "create_list"
 SERVICE_DELETE_LIST = "delete_list"
@@ -238,6 +239,29 @@ CREATE_CHORE_SCHEMA = vol.All(
     ),
     _has_assignee,
 )
+
+
+def _has_chore_metadata(data: dict) -> dict:
+    """Avoid issuing empty updates or accidentally addressing an occurrence."""
+    if not data["chore_id"].isascii() or not data["chore_id"].isdigit():
+        raise vol.Invalid("chore_id must be the bare numeric series ID")
+    if "emoji" not in data and "reward_points" not in data:
+        raise vol.Invalid("Supply emoji or reward_points, or both")
+    return data
+
+
+UPDATE_CHORE_SCHEMA = vol.All(
+    vol.Schema(
+        {
+            vol.Required("chore_id"): cv.string,
+            vol.Optional("emoji"): vol.All(cv.string, vol.Length(min=1)),
+            vol.Optional("reward_points"): _POINTS,
+            **_FRAME_ID_FIELD,
+        }
+    ),
+    _has_chore_metadata,
+)
+
 
 CREATE_TASK_SCHEMA = vol.Schema(
     {
@@ -399,6 +423,19 @@ async def _create_chore(api: SkylightAPI, frame_id: str, data: Mapping[str, Any]
     )
 
 
+async def _update_chore(
+    api: SkylightAPI, frame_id: str, data: Mapping[str, Any]
+) -> None:
+    """Only change explicitly supplied metadata; zero means no star reward."""
+    attributes = {}
+    if "emoji" in data:
+        attributes["emoji_icon"] = data["emoji"]
+    if "reward_points" in data:
+        # Skylight rejects numeric zero; null is its native no-reward value.
+        attributes["reward_points"] = data["reward_points"] or None
+    await api.update_chore(frame_id, data["chore_id"], attributes)
+
+
 async def _create_task(api: SkylightAPI, frame_id: str, data: Mapping[str, Any]) -> None:
     await api.create_task_box_item(
         frame_id,
@@ -469,6 +506,7 @@ async def _add_recipe_to_grocery(
 # (service name, schema, coordinator to refresh afterwards, action)
 _WRITE_SERVICES: tuple[tuple[str, vol.Schema, str, ServiceAction], ...] = (
     (SERVICE_CREATE_CHORE, CREATE_CHORE_SCHEMA, "sensor_coordinator", _create_chore),
+    (SERVICE_UPDATE_CHORE, UPDATE_CHORE_SCHEMA, "sensor_coordinator", _update_chore),
     (SERVICE_CREATE_TASK, CREATE_TASK_SCHEMA, "sensor_coordinator", _create_task),
     (SERVICE_CREATE_LIST, CREATE_LIST_SCHEMA, "lists_coordinator", _create_list),
     (SERVICE_DELETE_LIST, DELETE_LIST_SCHEMA, "lists_coordinator", _delete_list),
