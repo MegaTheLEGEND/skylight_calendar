@@ -296,6 +296,29 @@ action:
 
 ---
 
+## Chores that repeat after completion
+
+`skylight.create_chore` accepts `renewal_interval` and `renewal_unit`
+(`day`, `week` or `month`) together. Skylight schedules the next chore from the
+actual completion date; Home Assistant does not maintain a second timer.
+For example, completing a 30-day chore late on 4 November makes its next due
+date 4 December, rather than retaining its original calendar date.
+
+```yaml
+action: skylight.create_chore
+data:
+  summary: Replace pre-filter
+  up_for_grabs: true
+  renewal_interval: 30
+  renewal_unit: day
+```
+
+`start` optionally sets the initial due date; omitted, it defaults to today.
+Existing chores are not modified. Omit both renewal fields for existing create
+behavior. Do not combine renewal with `recurrence_set` or `recurring_until`.
+
+---
+
 ## Uploading photos & videos
 
 The integration exposes a `skylight.upload_media` service that pushes an image or short video to your frame — same path the mobile app uses (temp AWS credentials → SigV4-signed PUT to S3 → notification to Skylight).

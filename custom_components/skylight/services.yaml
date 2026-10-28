@@ -103,6 +103,23 @@ create_chore:
       example: "2026-12-31"
       selector:
         date: {}
+    renewal_interval:
+      name: Repeat after completion
+      description: >-
+        Positive interval measured from completion. Supply Renewal unit too.
+        Do not combine with Recurrence rule or Recurring until.
+      example: 30
+      selector:
+        number:
+          min: 1
+          step: 1
+          mode: box
+    renewal_unit:
+      name: Renewal unit
+      description: Unit for Repeat after completion; supply both fields together.
+      selector:
+        select:
+          options: [day, week, month]
     frame_id: *frame_id
 
 create_task:
