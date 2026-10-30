@@ -218,6 +218,19 @@ def _has_assignee(data: dict) -> dict:
     return data
 
 
+def _has_renewal_schedule(data: dict) -> dict:
+    """Require one complete scheduling mode for completion-based renewal."""
+    interval = data.get("renewal_interval")
+    unit = data.get("renewal_unit")
+    if (interval is None) != (unit is None):
+        raise vol.Invalid("renewal_interval and renewal_unit must be supplied together")
+    if interval is not None and (
+        data.get("recurrence_set") or data.get("recurring_until")
+    ):
+        raise vol.Invalid("Renewal cannot be combined with calendar recurrence")
+    return data
+
+
 CREATE_CHORE_SCHEMA = vol.All(
     vol.Schema(
         {
@@ -233,10 +246,15 @@ CREATE_CHORE_SCHEMA = vol.All(
             vol.Optional("up_for_grabs", default=False): cv.boolean,
             vol.Optional("recurrence_set"): cv.string,
             vol.Optional("recurring_until"): cv.date,
+            vol.Optional("renewal_interval"): vol.All(
+                vol.Coerce(int), vol.Range(min=1)
+            ),
+            vol.Optional("renewal_unit"): vol.In(["day", "week", "month"]),
             **_FRAME_ID_FIELD,
         }
     ),
     _has_assignee,
+    _has_renewal_schedule,
 )
 
 CREATE_TASK_SCHEMA = vol.Schema(
@@ -396,6 +414,8 @@ async def _create_chore(api: SkylightAPI, frame_id: str, data: Mapping[str, Any]
         up_for_grabs=data["up_for_grabs"],
         recurrence_set=data.get("recurrence_set"),
         recurring_until=until.isoformat() if until else None,
+        renewal_interval=data.get("renewal_interval"),
+        renewal_unit=data.get("renewal_unit"),
     )
 
 
