@@ -82,6 +82,18 @@ class TimedCompletionServiceTests(unittest.IsolatedAsyncioTestCase):
             "111", "12345", "2026-11-11", "2026-11-11", instance_time="14:00", category_id="67890"
         )
 
+    async def test_delete_chore_service_strips_occurrence(self):
+        for uid in ("12345", "12345-2026-11-11", "12345-2026-11-11-1400"):
+            api = NS(delete_chore=AsyncMock())
+            with self.subTest(uid=uid):
+                await self.scope["_delete_chore"](api, "111", {"chore_id": uid})
+                api.delete_chore.assert_awaited_once_with("111", "12345")
+
+    def test_delete_chore_documented_for_action_editor(self):
+        fields = completion.service_fields("delete_chore")
+        self.assertTrue(fields["chore_id"]["required"])
+        self.assertIn("frame_id", fields)
+
     def test_schema_accepts_timed_and_rejects_bad_times(self):
         self.schema({"chore_id": "12345-2026-11-11-1400", "category_id": "67890"})
         for uid in ("12345-2026-11-11-2400", "12345-2026-11-11-1260", "12345-2026-11-11-14:00"):

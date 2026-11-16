@@ -563,8 +563,11 @@ async def _delete_list(api: SkylightAPI, frame_id: str, data: Mapping[str, Any])
 async def _delete_chore(api: SkylightAPI, frame_id: str, data: Mapping[str, Any]) -> None:
     """Delete a chore outright — the only supported way to remove an
     up-for-grabs chore, since it has no assignee and so never appears in a
-    per-member todo list (todo.remove_item has nothing to target)."""
-    await api.delete_chore(frame_id, data["chore_id"])
+    per-member todo list (todo.remove_item has nothing to target).
+
+    Accepts an occurrence id as listed in a chores sensor; the route is keyed on
+    the series, so the date/time suffix is dropped, as the todo entity does."""
+    await api.delete_chore(frame_id, split_chore_uid(data["chore_id"]).series)
 
 
 async def _create_reward(api: SkylightAPI, frame_id: str, data: Mapping[str, Any]) -> None:

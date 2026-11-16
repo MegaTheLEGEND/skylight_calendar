@@ -264,6 +264,24 @@ delete_list:
         text: {}
     frame_id: *frame_id
 
+delete_chore:
+  name: Delete chore
+  description: >-
+    Permanently delete a chore, including every occurrence of a recurring
+    chore. The only way to remove an up-for-grabs chore, which has no
+    family member's to-do list to remove it from.
+  fields:
+    chore_id:
+      name: Chore ID
+      description: >-
+        ID from a chores sensor. An occurrence ID such as 12345-2026-11-04
+        deletes its whole series.
+      required: true
+      example: "12345"
+      selector:
+        text: {}
+    frame_id: *frame_id
+
 create_reward:
   name: Create reward
   description: Add a reward that family members can redeem with earned points.
