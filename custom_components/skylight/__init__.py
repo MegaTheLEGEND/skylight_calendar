@@ -43,6 +43,7 @@ from .const import (
     SCAN_INTERVAL_OPTIONS,
 )
 from .buddy import SkylightBuddyCoordinator
+from .chore_ids import split_chore_uid
 from .coordinator import (
     SkylightCalendarCoordinator,
     SkylightFrameCoordinator,
@@ -284,16 +285,14 @@ UPDATE_CHORE_SCHEMA = vol.All(
 
 def _has_completion_target(data: dict) -> dict:
     """Validate exact chore identity and one explicit completion recipient."""
-    series_id, separator, occurrence = data["chore_id"].partition("-")
+    # Anything that doesn't parse comes back whole as the "series", so a bad
+    # occurrence suffix fails the digit check below.
+    series_id = split_chore_uid(data["chore_id"]).series
     if not series_id.isascii() or not series_id.isdigit():
-        raise vol.Invalid("chore_id must contain a numeric series ID")
-    if separator:
-        try:
-            parsed = date.fromisoformat(occurrence)
-        except ValueError as err:
-            raise vol.Invalid("Occurrence date must be YYYY-MM-DD") from err
-        if parsed.isoformat() != occurrence:
-            raise vol.Invalid("Occurrence date must be YYYY-MM-DD")
+        raise vol.Invalid(
+            "chore_id must be a numeric series ID, optionally followed by "
+            "-YYYY-MM-DD or -YYYY-MM-DD-HHMM"
+        )
     if bool(data.get("assignee")) == bool(data.get("category_id")):
         raise vol.Invalid("Supply exactly one of assignee or category_id")
     if "assignee" in data and not data["assignee"].strip():
@@ -512,9 +511,9 @@ async def _complete_chore(
             "Completion recipient must identify exactly one family member on this frame"
         )
     category_id = str(matches[0]["id"])
-    series_id, _, occurrence = data["chore_id"].partition("-")
+    series_id, instance_date, instance_time = split_chore_uid(data["chore_id"])
     completed_on = data.get("completed_on") or dt_util.now().date()
-    day = date.fromisoformat(occurrence) if occurrence else completed_on
+    day = date.fromisoformat(instance_date) if instance_date else completed_on
     payload = await api.get_chores(
         frame_id, day.isoformat(), (day + timedelta(days=1)).isoformat()
     )
@@ -536,8 +535,8 @@ async def _complete_chore(
     if not attrs.get("up_for_grabs") and str(assigned or "") != category_id:
         raise HomeAssistantError("Chore is assigned to a different family member")
     await api.complete_chore(
-        frame_id, series_id, completed_on.isoformat(), occurrence or None,
-        category_id=category_id,
+        frame_id, series_id, completed_on.isoformat(), instance_date,
+        instance_time=instance_time, category_id=category_id,
     )
 
 

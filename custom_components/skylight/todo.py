@@ -19,6 +19,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import dt as dt_util
 
 from .api import SkylightAPI
+from .chore_ids import split_chore_uid
 from .const import CHORE_COMPLETE_STATUSES, DOMAIN
 from .coordinator import SkylightListsCoordinator, SkylightSensorCoordinator
 
@@ -119,24 +120,6 @@ def _chore_is_complete(attrs: dict) -> bool:
     if str(attrs.get("status") or "") in CHORE_COMPLETE_STATUSES:
         return True
     return bool(attrs.get("completed_on") or attrs.get("completed_at"))
-
-
-def _split_chore_uid(uid: str) -> tuple[str, str | None]:
-    """Chore uid → its ``(series_id, occurrence_date)``.
-
-    A recurring chore is listed once per occurrence under a composite id —
-    ``101940933-2026-08-28`` — while one-off chores keep the bare series number.
-    Every chore route is keyed on the series id alone, so the composite form has
-    to be taken apart before it can be put in a URL; the date half is what
-    ``instance_date`` wants.
-    """
-    series, sep, suffix = uid.partition("-")
-    if sep and series.isdigit():
-        try:
-            return series, date.fromisoformat(suffix).isoformat()
-        except ValueError:
-            pass
-    return uid, None
 
 
 def _chore_start(due: date | datetime | None) -> str:
@@ -332,7 +315,7 @@ class SkylightMemberChoreTodo(
         if not item.uid:
             return
 
-        chore_id, occurrence = _split_chore_uid(item.uid)
+        chore_id, instance_date, instance_time = split_chore_uid(item.uid)
         attrs = self._chore_attributes(item.uid)
 
         attributes: dict = {}
@@ -351,12 +334,11 @@ class SkylightMemberChoreTodo(
         if item.status is not None:
             want_complete = item.status == TodoItemStatus.COMPLETED
             if want_complete != _chore_is_complete(attrs):
-                # Which occurrence is being ticked: the composite UID date, or
-                # None for bare-UID chores. The API requires instance_date to be
-                # absent for bare-UID chores even when start is set — the
-                # composite UID format is the sole signal that instance_date is
-                # needed.
-                instance_date = occurrence
+                # Which occurrence is being ticked comes from the composite UID:
+                # its date, plus its time of day for a timed chore (#18). Both
+                # are None for a bare-UID chore, and the API requires them to be
+                # absent then, even when start is set — the composite UID format
+                # is the sole signal that they're needed.
                 if want_complete:
                     # The frame files completions by calendar day, so use HA's
                     # local date rather than UTC.
@@ -365,15 +347,19 @@ class SkylightMemberChoreTodo(
                         chore_id,
                         dt_util.now().date().isoformat(),
                         instance_date,
+                        instance_time=instance_time,
                     )
                 else:
                     await self._api.uncomplete_chore(
-                        self._frame_id, chore_id, instance_date
+                        self._frame_id,
+                        chore_id,
+                        instance_date,
+                        instance_time=instance_time,
                     )
 
         await self.coordinator.async_request_refresh()
 
     async def async_delete_todo_items(self, uids: list[str]) -> None:
         for uid in uids:
-            await self._api.delete_chore(self._frame_id, _split_chore_uid(uid)[0])
+            await self._api.delete_chore(self._frame_id, split_chore_uid(uid).series)
         await self.coordinator.async_request_refresh()

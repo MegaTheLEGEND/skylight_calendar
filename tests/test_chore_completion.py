@@ -65,7 +65,7 @@ def api_client():
     ) or (isinstance(n, ast.FunctionDef) and n.name == "_compact")]
     future = ast.ImportFrom(module="__future__", names=[ast.alias(name="annotations")], level=0)
     module = ast.fix_missing_locations(ast.Module(body=[future, *nodes], type_ignores=[]))
-    scope = {"CHORE_STATUS_COMPLETE": "complete"}
+    scope = {"CHORE_STATUS_COMPLETE": "complete", "CHORE_STATUS_PENDING": "pending"}
     exec(compile(module, "<real API client>", "exec"), scope)
     api = object.__new__(scope["SkylightAPI"])
     api._request = AsyncMock(return_value={"data": {}})
@@ -96,12 +96,12 @@ class CompletionTests(unittest.IsolatedAsyncioTestCase):
     async def test_one_off_omits_instance_date_even_with_start(self):
         api = self.api(start="2026-11-04")
         await self.scope["_complete_chore"](api, "111", self.schema({"chore_id": "12345", "assignee": " alex "}))
-        api.complete_chore.assert_awaited_once_with("111", "12345", "2025-01-01", None, category_id="67890")
+        api.complete_chore.assert_awaited_once_with("111", "12345", "2025-01-01", None, instance_time=None, category_id="67890")
 
     async def test_late_occurrence_and_completion_dates_are_separate(self):
         api = self.api("12345-2026-11-04")
         await self.scope["_complete_chore"](api, "111", self.schema({"chore_id": "12345-2026-11-04", "category_id": "67890", "completed_on": "2026-11-08"}))
-        api.complete_chore.assert_awaited_once_with("111", "12345", "2026-11-08", "2026-11-04", category_id="67890")
+        api.complete_chore.assert_awaited_once_with("111", "12345", "2026-11-08", "2026-11-04", instance_time=None, category_id="67890")
         api.get_chores.assert_awaited_once_with("111", "2026-11-04", "2026-11-05")
 
     async def test_real_client_wire_payload_and_legacy_compatibility(self):

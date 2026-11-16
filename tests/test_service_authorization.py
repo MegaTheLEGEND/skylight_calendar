@@ -28,6 +28,17 @@ EXPECTED_METHODS = {
     'complete_chore': 'complete_chore',
 }
 
+def load_chore_ids():
+    # chore_ids.py has no Home Assistant imports, so load it straight from its
+    # file; importing it as a package member would run the package __init__.
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        'skylight_chore_ids', SOURCE / 'custom_components/skylight/chore_ids.py')
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 class HomeAssistantError(Exception):
     def __init__(self, *args, **kwargs): super().__init__(*args)
 class Unauthorized(HomeAssistantError): pass
@@ -49,7 +60,7 @@ def load_exact_nodes():
                 nodes.append(node)
     future = ast.ImportFrom(module='__future__', names=[ast.alias(name='annotations')], level=0)
     module = ast.fix_missing_locations(ast.Module(body=[future, *nodes], type_ignores=[]))
-    scope = {'DOMAIN': 'skylight', 'POLICY_CONTROL': 'control', 'HomeAssistantError': HomeAssistantError, 'Unauthorized': Unauthorized, 'UnknownUser': UnknownUser, 'SkylightAPIError': SkylightAPIError, 'date': date, 'timedelta': __import__('datetime').timedelta, 'dt_util': NS(now=lambda: datetime(2025,1,1)), 'mimetypes': mimetypes, '_LOGGER': logging.getLogger('offline')}
+    scope = {'DOMAIN': 'skylight', 'POLICY_CONTROL': 'control', 'HomeAssistantError': HomeAssistantError, 'Unauthorized': Unauthorized, 'UnknownUser': UnknownUser, 'SkylightAPIError': SkylightAPIError, 'date': date, 'timedelta': __import__('datetime').timedelta, 'dt_util': NS(now=lambda: datetime(2025,1,1)), 'mimetypes': mimetypes, '_LOGGER': logging.getLogger('offline'), 'split_chore_uid': load_chore_ids().split_chore_uid}
     for node in ast.walk(module):
         if isinstance(node, ast.Name) and node.id.endswith('_SCHEMA'):
             scope[node.id] = object()
@@ -110,7 +121,9 @@ class Rig:
         # unchanged exact AST code objects into this rig's isolated namespace.
         import types
         for name, value in scope.items():
-            if isinstance(value, types.FunctionType):
+            # Only functions exec'd from the integration source; helpers loaded
+            # from their own module (split_chore_uid) keep their own globals.
+            if isinstance(value, types.FunctionType) and value.__globals__ is scope:
                 self.scope[name] = types.FunctionType(value.__code__, self.scope, name, value.__defaults__, value.__closure__)
         self.scope['_WRITE_SERVICES'] = tuple((name, schema, key, self.scope[action.__name__]) for name, schema, key, action in scope['_WRITE_SERVICES'])
         self.scope['_async_register_services'](self.hass)
