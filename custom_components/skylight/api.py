@@ -651,6 +651,8 @@ class SkylightAPI:
         chore_id: str,
         completed_on: str,
         instance_date: str | None = None,
+        *,
+        category_id: str | None = None,
     ) -> dict:
         """Tick a chore off, crediting its reward points.
 
@@ -669,12 +671,10 @@ class SkylightAPI:
         deriving one from UTC would file a late-evening completion under
         tomorrow.
 
-        ``instance_date`` is conditional, not merely optional. A chore that has
-        a ``start`` day *must* name its occurrence or the endpoint answers
-        ``422 instance_date can't be blank``. An on-demand chore (``start:
-        null`` — the renewal-interval kind) has no occurrence to name, and must
-        omit the key: the frame then materialises one on the day of completion,
-        and the response comes back under a freshly composite id.
+        Only a composite occurrence ID supplies ``instance_date``. Bare chore
+        IDs must omit it, even if the chore has a ``start`` date. ``category_id``
+        optionally credits an explicitly selected family member, including an
+        up-for-grabs completion; omitted, existing caller behavior is preserved.
 
         The response's ``meta.reward_points`` and ``meta.milestones_achieved``
         report what the completion earned.
@@ -686,6 +686,7 @@ class SkylightAPI:
                 status=CHORE_STATUS_COMPLETE,
                 instance_date=instance_date,
                 completed_on=completed_on,
+                category_id=category_id,
             ),
         )
 
