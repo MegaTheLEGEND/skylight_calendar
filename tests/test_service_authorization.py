@@ -1,7 +1,7 @@
 """Offline regression tests for Skylight domain-service authorization.
 
 Run from the repository root:
-    python3 -m unittest discover -s tests -p 'test_service_authorization.py' -v
+    python -m unittest discover -s tests -p test_service_authorization.py -v
 
 The real registration, guard, resolver and action functions are loaded directly
 from the integration's AST, without importing Home Assistant or the vendor API.
@@ -48,7 +48,7 @@ class SkylightAPIError(Exception): pass
 
 def load_exact_nodes():
     target = SOURCE / 'custom_components/skylight/__init__.py'
-    tree = ast.parse(target.read_text())
+    tree = ast.parse(target.read_text(encoding='utf-8'))
     function_names = {'_resolve_entry', '_resolve_assignees', '_async_authorize_frame_write', '_make_write_handler', '_async_register_services', '_create_chore', '_update_chore', '_complete_chore', '_create_task', '_create_list', '_delete_list', '_delete_chore', '_create_reward', '_redeem_reward', '_create_recipe', '_plan_meal', '_add_recipe_to_grocery'}
     nodes = []
     for node in tree.body:
@@ -152,7 +152,7 @@ class RegistrationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(rig.hass.services.schemas), len(EXPECTED_METHODS))
 
     def test_registry_key_uses_actual_aggregate_calendar_constructor(self):
-        tree = ast.parse((SOURCE / 'custom_components/skylight/calendar.py').read_text())
+        tree = ast.parse((SOURCE / 'custom_components/skylight/calendar.py').read_text(encoding='utf-8'))
         cls = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == 'SkylightAggregateCalendar')
         assignments = [n for n in ast.walk(cls) if isinstance(n, ast.Assign) and any(isinstance(t, ast.Attribute) and t.attr == '_attr_unique_id' for t in n.targets)]
         self.assertEqual(len(assignments), 1)
