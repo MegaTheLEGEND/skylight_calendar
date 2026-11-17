@@ -11,7 +11,7 @@ It talks to Skylight's cloud service, so it works with any Home Assistant instal
 ## Contents
 
 - [Requirements](#requirements)
-- [Installation](#installation): [HACS](#option-a-hacs-recommended) · [Manual](#option-b-manual-installation)
+- [Installation](#installation): [Marketplace or HACS](#option-a-marketplace-or-hacs-recommended) · [Manual](#option-b-manual-installation)
 - [Setup](#setup)
 - [What you get](#what-you-get)
 - [Dashboard examples](#dashboard-examples) · [Automation examples](#automation-examples)
@@ -26,7 +26,7 @@ It talks to Skylight's cloud service, so it works with any Home Assistant instal
 
 - Home Assistant **2024.1 or newer**, with any installation type: Home Assistant OS (Green, Yellow, Raspberry Pi, a virtual machine), Supervised, Container (Docker) or Core (Python virtual environment).
 - A Skylight account that can sign in to the Skylight app, with at least one frame.
-- [HACS](https://hacs.xyz/) if you want one-click installs and updates (optional).
+- For one-click installs and updates (optional): the built-in **Marketplace** on Home Assistant 2026.11 or newer, or [HACS](https://hacs.xyz/) on older releases.
 
 The YAML examples use current Home Assistant syntax. On releases before 2024.8, write `service:` where the examples say `action:`. Before 2024.10, write `trigger:` with `- platform: time` where the examples say `triggers:` with `- trigger: time`.
 
@@ -36,19 +36,31 @@ The YAML examples use current Home Assistant syntax. On releases before 2024.8, 
 
 Every step works from a web browser on any computer, phone or tablet that can open Home Assistant.
 
-### Option A: HACS (recommended)
+### Option A: Marketplace or HACS (recommended)
 
-1. In Home Assistant, open **HACS**, then the three-dot menu (top right) → **Custom repositories**.
+Click this button to open Skylight in your Home Assistant's Marketplace (or in HACS on older releases):
+
+[![Open your Home Assistant instance and open a repository inside the Marketplace.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=megathelegend&repository=skylight_calendar&category=integration)
+
+Then select **Download**, restart Home Assistant if asked, and continue with [Setup](#setup). Or follow the steps for your version:
+
+**Home Assistant 2026.11 or newer (Marketplace).** HACS is built in as the Marketplace, so there's nothing extra to install.
+
+1. Go to **Settings → Marketplace**. If this is your first visit, accept the first-run notice.
+2. Select **Add from link**, paste `https://github.com/MegaTheLEGEND/skylight_calendar`, and choose **Integration** if asked. Adding a link needs the Marketplace to be connected to a GitHub account.
+3. Open **Skylight** and select **Download**.
+4. If asked to restart, use the restart repair under **Settings → System → Repairs**.
+5. Continue with [Setup](#setup).
+
+**Home Assistant 2026.10 or older (HACS).**
+
+1. Open **HACS**, then the three-dot menu (top right) → **Custom repositories**.
 2. Add `https://github.com/MegaTheLEGEND/skylight_calendar` with type **Integration**.
-
-   Or use this button to do steps 1–2:
-
-   [![Open your Home Assistant instance and open a repository inside HACS.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=megathelegend&repository=skylight_calendar&category=integration)
 3. Search HACS for **Skylight**, open it and select **Download**. Choose the newest version offered.
 4. Restart Home Assistant: **Settings → System → ⋮ (top right) → Restart Home Assistant**.
 5. Continue with [Setup](#setup).
 
-HACS tells you when updates are available.
+Either way, you're told when updates are available. If you already installed Skylight through HACS, updating Home Assistant to 2026.11 moves it to the Marketplace automatically.
 
 ### Option B: Manual installation
 
@@ -559,7 +571,7 @@ When you [open an issue](https://github.com/MegaTheLEGEND/skylight_calendar/issu
 The integration's domain changed from `skylight_calendar` to `skylight`. Every entity ID, action name and config entry has to be set up again:
 
 1. **Settings → Devices & Services → Skylight → ⋮ → Delete**.
-2. In HACS, open **Skylight → ⋮ → Redownload** and choose the newest version. For a manual install, copy in the new `skylight` folder and delete the old `custom_components/skylight_calendar` folder.
+2. In the Marketplace (or HACS on 2026.10 or older), open **Skylight**, redownload it and choose the newest version. For a manual install, copy in the new `skylight` folder and delete the old `custom_components/skylight_calendar` folder.
 3. Restart Home Assistant.
 4. **Add Integration → Skylight** and sign in again.
 5. Update automations and dashboards that use `skylight_calendar.*` entity IDs or the `skylight_calendar.upload_media` action. The action is now `skylight.upload_media`; check **Developer Tools → States** for the new entity IDs.
