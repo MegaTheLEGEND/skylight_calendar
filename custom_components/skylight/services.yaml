@@ -122,6 +122,70 @@ create_chore:
           options: [day, week, month]
     frame_id: *frame_id
 
+update_chore:
+  name: Update chore reward and emoji
+  description: >-
+    Change the supplied metadata on an existing chore series, including all
+    recurring occurrences. Does not complete the chore or award stars.
+  fields:
+    chore_id:
+      name: Chore series ID
+      description: Bare numeric series ID, without an occurrence date suffix.
+      required: true
+      example: "12345"
+      selector:
+        text: {}
+    emoji:
+      name: Emoji
+      description: Optional emoji; omit to preserve the existing icon.
+      example: 🧹
+      selector:
+        text: {}
+    reward_points:
+      name: Reward points
+      description: Optional star reward. Zero removes the reward; omit to preserve it.
+      example: 1
+      selector:
+        number:
+          min: 0
+          step: 1
+          mode: box
+
+complete_chore:
+  name: Complete chore for a family member
+  description: >-
+    Complete a pending chore, including an up-for-grabs chore, and credit its
+    stars to one selected family member. Requires control of the selected frame.
+    The selected name is a credit recipient, not an authentication identity.
+  fields:
+    chore_id:
+      name: Chore ID
+      description: >-
+        Exact ID from a chores sensor. Preserve the date suffix for a recurring
+        occurrence. Do not add a date to a bare ID.
+      required: true
+      example: "12345-2026-11-04"
+      selector:
+        text: {}
+    assignee:
+      name: Family member name
+      description: Exact name, case-insensitive. Supply this or Family member ID, not both.
+      example: Alex
+      selector:
+        text: {}
+    category_id:
+      name: Family member ID
+      description: Existing linked family member on this frame; alternative to a name.
+      example: "67890"
+      selector:
+        text: {}
+    completed_on:
+      name: Completion date
+      description: Actual completion date, defaulting to today in Home Assistant's time zone.
+      selector:
+        date: {}
+    frame_id: *frame_id
+
 create_task:
   name: Create task
   description: >-
@@ -196,6 +260,24 @@ delete_list:
       description: ID of the list to delete.
       required: true
       example: "1234567"
+      selector:
+        text: {}
+    frame_id: *frame_id
+
+delete_chore:
+  name: Delete chore
+  description: >-
+    Permanently delete a chore, including every occurrence of a recurring
+    chore. The only way to remove an up-for-grabs chore, which has no
+    family member's to-do list to remove it from.
+  fields:
+    chore_id:
+      name: Chore ID
+      description: >-
+        ID from a chores sensor. An occurrence ID such as 12345-2026-11-04
+        deletes its whole series.
+      required: true
+      example: "12345"
       selector:
         text: {}
     frame_id: *frame_id

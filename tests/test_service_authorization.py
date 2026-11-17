@@ -1,7 +1,7 @@
 """Offline regression tests for Skylight domain-service authorization.
 
 Run from the repository root:
-    python3 -m unittest discover -s tests -p 'test_service_authorization.py' -v
+    python -m unittest discover -s tests -p test_service_authorization.py -v
 
 The real registration, guard, resolver and action functions are loaded directly
 from the integration's AST, without importing Home Assistant or the vendor API.
@@ -24,8 +24,20 @@ EXPECTED_METHODS = {
     'create_reward': 'create_reward', 'redeem_reward': 'redeem_reward',
     'create_recipe': 'create_recipe', 'plan_meal': 'create_meal_sitting',
     'add_recipe_to_grocery_list': 'add_recipe_to_grocery_list',
-    'upload_media': 'upload_media',
+    'upload_media': 'upload_media', 'update_chore': 'update_chore',
+    'complete_chore': 'complete_chore',
 }
+
+def load_chore_ids():
+    # chore_ids.py has no Home Assistant imports, so load it straight from its
+    # file; importing it as a package member would run the package __init__.
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        'skylight_chore_ids', SOURCE / 'custom_components/skylight/chore_ids.py')
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
 
 class HomeAssistantError(Exception):
     def __init__(self, *args, **kwargs): super().__init__(*args)
@@ -36,8 +48,8 @@ class SkylightAPIError(Exception): pass
 
 def load_exact_nodes():
     target = SOURCE / 'custom_components/skylight/__init__.py'
-    tree = ast.parse(target.read_text())
-    function_names = {'_resolve_entry', '_resolve_assignees', '_async_authorize_frame_write', '_make_write_handler', '_async_register_services', '_create_chore', '_create_task', '_create_list', '_delete_list', '_delete_chore', '_create_reward', '_redeem_reward', '_create_recipe', '_plan_meal', '_add_recipe_to_grocery'}
+    tree = ast.parse(target.read_text(encoding='utf-8'))
+    function_names = {'_resolve_entry', '_resolve_assignees', '_async_authorize_frame_write', '_make_write_handler', '_async_register_services', '_create_chore', '_update_chore', '_complete_chore', '_create_task', '_create_list', '_delete_list', '_delete_chore', '_create_reward', '_redeem_reward', '_create_recipe', '_plan_meal', '_add_recipe_to_grocery'}
     nodes = []
     for node in tree.body:
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name in function_names:
@@ -48,7 +60,7 @@ def load_exact_nodes():
                 nodes.append(node)
     future = ast.ImportFrom(module='__future__', names=[ast.alias(name='annotations')], level=0)
     module = ast.fix_missing_locations(ast.Module(body=[future, *nodes], type_ignores=[]))
-    scope = {'DOMAIN': 'skylight', 'POLICY_CONTROL': 'control', 'HomeAssistantError': HomeAssistantError, 'Unauthorized': Unauthorized, 'UnknownUser': UnknownUser, 'SkylightAPIError': SkylightAPIError, 'date': date, 'dt_util': NS(now=lambda: datetime(2025,1,1)), 'mimetypes': mimetypes, '_LOGGER': logging.getLogger('offline')}
+    scope = {'DOMAIN': 'skylight', 'POLICY_CONTROL': 'control', 'HomeAssistantError': HomeAssistantError, 'Unauthorized': Unauthorized, 'UnknownUser': UnknownUser, 'SkylightAPIError': SkylightAPIError, 'date': date, 'timedelta': __import__('datetime').timedelta, 'dt_util': NS(now=lambda: datetime(2025,1,1)), 'mimetypes': mimetypes, '_LOGGER': logging.getLogger('offline'), 'split_chore_uid': load_chore_ids().split_chore_uid}
     for node in ast.walk(module):
         if isinstance(node, ast.Name) and node.id.endswith('_SCHEMA'):
             scope[node.id] = object()
@@ -67,7 +79,7 @@ class Rig:
             def __getattr__(self, method):
                 async def invoke(*args, **kwargs):
                     log.append(('api', method, args, kwargs))
-                    return {'data': [{'id':'fake-person', 'attributes': {'label':'Alex', 'linked_to_profile':True}}]} if method == 'get_categories' else {'data': {'message_ids': ['fake']}}
+                    return {'data': [{'id':'12345', 'attributes': {'status':'pending', 'up_for_grabs':True}}]} if method == 'get_chores' else {'data': [{'id':'fake-person', 'attributes': {'label':'Alex', 'linked_to_profile':True}}]} if method == 'get_categories' else {'data': {'message_ids': ['fake']}}
                 return invoke
         class Coordinator:
             async def async_request_refresh(self): log.append(('refresh',))
@@ -109,13 +121,15 @@ class Rig:
         # unchanged exact AST code objects into this rig's isolated namespace.
         import types
         for name, value in scope.items():
-            if isinstance(value, types.FunctionType):
+            # Only functions exec'd from the integration source; helpers loaded
+            # from their own module (split_chore_uid) keep their own globals.
+            if isinstance(value, types.FunctionType) and value.__globals__ is scope:
                 self.scope[name] = types.FunctionType(value.__code__, self.scope, name, value.__defaults__, value.__closure__)
         self.scope['_WRITE_SERVICES'] = tuple((name, schema, key, self.scope[action.__name__]) for name, schema, key, action in scope['_WRITE_SERVICES'])
         self.scope['_async_register_services'](self.hass)
 
     async def call(self, service, frame=None):
-        data = {'summary':'offline', 'routine':False, 'up_for_grabs':False, 'label':'offline', 'kind':'to_do', 'list_id':'list', 'chore_id':'12345', 'name':'reward', 'point_value':1, 'respawn_on_redemption':False, 'reward_id':'reward', 'date':date(2025,1,1), 'meal_category_id':'meal', 'recipe_id':'recipe', 'file_path':'/fake.jpg', 'assignees':['Alex']}
+        data = {'summary':'offline', 'routine':False, 'up_for_grabs':False, 'label':'offline', 'kind':'to_do', 'list_id':'list', 'chore_id':'12345', 'emoji':'🧹', 'reward_points':1, 'category_id':'fake-person', 'name':'reward', 'point_value':1, 'respawn_on_redemption':False, 'reward_id':'reward', 'date':date(2025,1,1), 'meal_category_id':'meal', 'recipe_id':'recipe', 'file_path':'/fake.jpg', 'assignees':['Alex']}
         if frame is not None: data['frame_id'] = frame
         # Nonempty assignees force the pre-write categories API path.
         await self.hass.services.handlers['skylight', service](NS(service=service, data=data, context=NS(user_id=self.uid)))
@@ -138,7 +152,7 @@ class RegistrationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(rig.hass.services.schemas), len(EXPECTED_METHODS))
 
     def test_registry_key_uses_actual_aggregate_calendar_constructor(self):
-        tree = ast.parse((SOURCE / 'custom_components/skylight/calendar.py').read_text())
+        tree = ast.parse((SOURCE / 'custom_components/skylight/calendar.py').read_text(encoding='utf-8'))
         cls = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == 'SkylightAggregateCalendar')
         assignments = [n for n in ast.walk(cls) if isinstance(n, ast.Assign) and any(isinstance(t, ast.Attribute) and t.attr == '_attr_unique_id' for t in n.targets)]
         self.assertEqual(len(assignments), 1)

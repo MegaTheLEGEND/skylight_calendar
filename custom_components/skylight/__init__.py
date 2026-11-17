@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable, Mapping
-from datetime import date
+from datetime import date, timedelta
 import logging
 import mimetypes
 from pathlib import Path
@@ -43,6 +43,7 @@ from .const import (
     SCAN_INTERVAL_OPTIONS,
 )
 from .buddy import SkylightBuddyCoordinator
+from .chore_ids import split_chore_uid
 from .coordinator import (
     SkylightCalendarCoordinator,
     SkylightFrameCoordinator,
@@ -173,6 +174,8 @@ async def _async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
 
 SERVICE_UPLOAD_MEDIA = "upload_media"
 SERVICE_CREATE_CHORE = "create_chore"
+SERVICE_UPDATE_CHORE = "update_chore"
+SERVICE_COMPLETE_CHORE = "complete_chore"
 SERVICE_CREATE_TASK = "create_task"
 SERVICE_CREATE_LIST = "create_list"
 SERVICE_DELETE_LIST = "delete_list"
@@ -256,6 +259,60 @@ CREATE_CHORE_SCHEMA = vol.All(
     _has_assignee,
     _has_renewal_schedule,
 )
+
+
+def _has_chore_metadata(data: dict) -> dict:
+    """Avoid issuing empty updates or accidentally addressing an occurrence."""
+    if not data["chore_id"].isascii() or not data["chore_id"].isdigit():
+        raise vol.Invalid("chore_id must be the bare numeric series ID")
+    if "emoji" not in data and "reward_points" not in data:
+        raise vol.Invalid("Supply emoji or reward_points, or both")
+    return data
+
+
+UPDATE_CHORE_SCHEMA = vol.All(
+    vol.Schema(
+        {
+            vol.Required("chore_id"): cv.string,
+            vol.Optional("emoji"): vol.All(cv.string, vol.Length(min=1)),
+            vol.Optional("reward_points"): _POINTS,
+            **_FRAME_ID_FIELD,
+        }
+    ),
+    _has_chore_metadata,
+)
+
+
+def _has_completion_target(data: dict) -> dict:
+    """Validate exact chore identity and one explicit completion recipient."""
+    # Anything that doesn't parse comes back whole as the "series", so a bad
+    # occurrence suffix fails the digit check below.
+    series_id = split_chore_uid(data["chore_id"]).series
+    if not series_id.isascii() or not series_id.isdigit():
+        raise vol.Invalid(
+            "chore_id must be a numeric series ID, optionally followed by "
+            "-YYYY-MM-DD or -YYYY-MM-DD-HHMM"
+        )
+    if bool(data.get("assignee")) == bool(data.get("category_id")):
+        raise vol.Invalid("Supply exactly one of assignee or category_id")
+    if "assignee" in data and not data["assignee"].strip():
+        raise vol.Invalid("assignee must contain a family member name")
+    return data
+
+
+COMPLETE_CHORE_SCHEMA = vol.All(
+    vol.Schema(
+        {
+            vol.Required("chore_id"): cv.string,
+            vol.Optional("assignee"): vol.All(cv.string, vol.Length(min=1)),
+            vol.Optional("category_id"): vol.All(cv.string, vol.Length(min=1)),
+            vol.Optional("completed_on"): cv.date,
+            **_FRAME_ID_FIELD,
+        }
+    ),
+    _has_completion_target,
+)
+
 
 CREATE_TASK_SCHEMA = vol.Schema(
     {
@@ -419,6 +476,70 @@ async def _create_chore(api: SkylightAPI, frame_id: str, data: Mapping[str, Any]
     )
 
 
+async def _update_chore(
+    api: SkylightAPI, frame_id: str, data: Mapping[str, Any]
+) -> None:
+    """Only change explicitly supplied metadata; zero means no star reward."""
+    attributes = {}
+    if "emoji" in data:
+        attributes["emoji_icon"] = data["emoji"]
+    if "reward_points" in data:
+        # Skylight rejects numeric zero; null is its native no-reward value.
+        attributes["reward_points"] = data["reward_points"] or None
+    await api.update_chore(frame_id, data["chore_id"], attributes)
+
+
+async def _complete_chore(
+    api: SkylightAPI, frame_id: str, data: Mapping[str, Any]
+) -> None:
+    """Complete a fresh pending occurrence for one exact family member."""
+    members = [
+        c for c in (await api.get_categories(frame_id)).get("data", []) or []
+        if (c.get("attributes") or {}).get("linked_to_profile") and c.get("id")
+    ]
+    if "category_id" in data:
+        matches = [c for c in members if str(c["id"]) == data["category_id"]]
+    else:
+        wanted = data["assignee"].strip().casefold()
+        matches = [
+            c for c in members
+            if ((c.get("attributes") or {}).get("label") or "").strip().casefold()
+            == wanted
+        ]
+    if len(matches) != 1:
+        raise HomeAssistantError(
+            "Completion recipient must identify exactly one family member on this frame"
+        )
+    category_id = str(matches[0]["id"])
+    series_id, instance_date, instance_time = split_chore_uid(data["chore_id"])
+    completed_on = data.get("completed_on") or dt_util.now().date()
+    day = date.fromisoformat(instance_date) if instance_date else completed_on
+    payload = await api.get_chores(
+        frame_id, day.isoformat(), (day + timedelta(days=1)).isoformat()
+    )
+    chores = [
+        c for c in payload.get("data", []) or []
+        if str(c.get("id")) == data["chore_id"]
+    ]
+    if len(chores) != 1:
+        raise HomeAssistantError("Chore occurrence was not found; refresh its ID first")
+    attrs = chores[0].get("attributes") or {}
+    if attrs.get("status") in {"complete", "completed"} or attrs.get(
+        "completed_on"
+    ) or attrs.get("completed_at"):
+        return  # Do not award stars again or change an existing completion's owner.
+    if attrs.get("status") != "pending":
+        raise HomeAssistantError("Chore does not have a confirmed pending status")
+    category = (chores[0].get("relationships") or {}).get("category") or {}
+    assigned = (category.get("data") or {}).get("id") or attrs.get("category_id")
+    if not attrs.get("up_for_grabs") and str(assigned or "") != category_id:
+        raise HomeAssistantError("Chore is assigned to a different family member")
+    await api.complete_chore(
+        frame_id, series_id, completed_on.isoformat(), instance_date,
+        instance_time=instance_time, category_id=category_id,
+    )
+
+
 async def _create_task(api: SkylightAPI, frame_id: str, data: Mapping[str, Any]) -> None:
     await api.create_task_box_item(
         frame_id,
@@ -442,8 +563,11 @@ async def _delete_list(api: SkylightAPI, frame_id: str, data: Mapping[str, Any])
 async def _delete_chore(api: SkylightAPI, frame_id: str, data: Mapping[str, Any]) -> None:
     """Delete a chore outright — the only supported way to remove an
     up-for-grabs chore, since it has no assignee and so never appears in a
-    per-member todo list (todo.remove_item has nothing to target)."""
-    await api.delete_chore(frame_id, data["chore_id"])
+    per-member todo list (todo.remove_item has nothing to target).
+
+    Accepts an occurrence id as listed in a chores sensor; the route is keyed on
+    the series, so the date/time suffix is dropped, as the todo entity does."""
+    await api.delete_chore(frame_id, split_chore_uid(data["chore_id"]).series)
 
 
 async def _create_reward(api: SkylightAPI, frame_id: str, data: Mapping[str, Any]) -> None:
@@ -489,6 +613,8 @@ async def _add_recipe_to_grocery(
 # (service name, schema, coordinator to refresh afterwards, action)
 _WRITE_SERVICES: tuple[tuple[str, vol.Schema, str, ServiceAction], ...] = (
     (SERVICE_CREATE_CHORE, CREATE_CHORE_SCHEMA, "sensor_coordinator", _create_chore),
+    (SERVICE_UPDATE_CHORE, UPDATE_CHORE_SCHEMA, "sensor_coordinator", _update_chore),
+    (SERVICE_COMPLETE_CHORE, COMPLETE_CHORE_SCHEMA, "sensor_coordinator", _complete_chore),
     (SERVICE_CREATE_TASK, CREATE_TASK_SCHEMA, "sensor_coordinator", _create_task),
     (SERVICE_CREATE_LIST, CREATE_LIST_SCHEMA, "lists_coordinator", _create_list),
     (SERVICE_DELETE_LIST, DELETE_LIST_SCHEMA, "lists_coordinator", _delete_list),

@@ -1,0 +1,6 @@
+# Offline test dependencies. Home Assistant itself is not needed.
+#   python -m pip install -r tests/requirements.txt
+voluptuous>=0.15
+PyYAML>=6.0
+# Only for test_api_http.py (HTTP-level client tests); skipped when missing.
+aiohttp>=3.9

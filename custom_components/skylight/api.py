@@ -651,6 +651,9 @@ class SkylightAPI:
         chore_id: str,
         completed_on: str,
         instance_date: str | None = None,
+        *,
+        instance_time: str | None = None,
+        category_id: str | None = None,
     ) -> dict:
         """Tick a chore off, crediting its reward points.
 
@@ -660,7 +663,7 @@ class SkylightAPI:
         rather than ``completed``.
 
         ``chore_id`` is the *series* id — the bare number, never the composite
-        ``<series>-<date>`` id a recurring occurrence is listed under.
+        ``<series>-<date>[-<HHMM>]`` id a recurring occurrence is listed under.
 
         The two dates (``YYYY-MM-DD``) are separate values and routinely differ:
         ``instance_date`` picks *which occurrence* is being ticked, while
@@ -669,12 +672,15 @@ class SkylightAPI:
         deriving one from UTC would file a late-evening completion under
         tomorrow.
 
-        ``instance_date`` is conditional, not merely optional. A chore that has
-        a ``start`` day *must* name its occurrence or the endpoint answers
-        ``422 instance_date can't be blank``. An on-demand chore (``start:
-        null`` — the renewal-interval kind) has no occurrence to name, and must
-        omit the key: the frame then materialises one on the day of completion,
-        and the response comes back under a freshly composite id.
+        Only a composite occurrence ID supplies ``instance_date``. Bare chore
+        IDs must omit it, even if the chore has a ``start`` date.
+
+        ``instance_time`` (``HH:MM``) goes with ``instance_date`` for a chore
+        scheduled at a time of day, whose occurrence id carries a ``-HHMM``
+        suffix. Without it Skylight answers ``422 instance_time can't be blank``
+        (#18). Leave it ``None`` for all-day and bare-id chores. ``category_id``
+        optionally credits an explicitly selected family member, including an
+        up-for-grabs completion; omitted, existing caller behavior is preserved.
 
         The response's ``meta.reward_points`` and ``meta.milestones_achieved``
         report what the completion earned.
@@ -685,12 +691,19 @@ class SkylightAPI:
             json_body=_compact(
                 status=CHORE_STATUS_COMPLETE,
                 instance_date=instance_date,
+                instance_time=instance_time,
                 completed_on=completed_on,
+                category_id=category_id,
             ),
         )
 
     async def uncomplete_chore(
-        self, frame_id: str, chore_id: str, instance_date: str | None = None
+        self,
+        frame_id: str,
+        chore_id: str,
+        instance_date: str | None = None,
+        *,
+        instance_time: str | None = None,
     ) -> dict:
         """Un-tick a chore.
 
@@ -700,7 +713,8 @@ class SkylightAPI:
         endpoint sets a state rather than removing a record. The response clears
         ``completed_on``, ``completed_at`` and ``completed_category``.
 
-        ``instance_date`` follows the same conditional rule as completing, and
+        ``instance_date`` and ``instance_time`` follow the same rules as
+        completing, and
         an on-demand chore acquires one *by being completed* — so un-ticking it
         does pass the date that completing it created.
         """
@@ -708,7 +722,9 @@ class SkylightAPI:
             "PUT",
             f"/api/frames/{frame_id}/chores/{chore_id}/completions",
             json_body=_compact(
-                status=CHORE_STATUS_PENDING, instance_date=instance_date
+                status=CHORE_STATUS_PENDING,
+                instance_date=instance_date,
+                instance_time=instance_time,
             ),
         )
 
