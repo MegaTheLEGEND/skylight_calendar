@@ -3,7 +3,15 @@
     "step": {
       "user": {
         "title": "Sign in to Skylight",
-        "description": "1. [Open Skylight sign-in]({auth_url}) in a new tab.\n2. Sign in with your Skylight email and password.\n3. When the page finishes loading, look at your browser's address bar — it will contain `?code=…`.\n4. Copy the value of `code` (or the whole URL — either works) and paste it below.",
+        "description": "Enter the email and password you use in the Skylight app. Home Assistant uses them once to sign in and link your account; your password isn't stored.",
+        "data": {
+          "email": "Email",
+          "password": "Password"
+        }
+      },
+      "browser": {
+        "title": "Sign in to Skylight in your browser",
+        "description": "Signing in directly didn't work, so sign in on Skylight's own page instead.\n\n1. [Open Skylight sign-in]({auth_url}) in a new tab.\n2. Sign in with your Skylight email and password.\n3. When the page finishes loading, look at your browser's address bar. It will contain `?code=…`.\n4. Copy the value of `code` (or the whole address; either works) and paste it below within about 30 seconds.",
         "data": {
           "code": "Authorization code"
         }
@@ -17,9 +25,10 @@
       }
     },
     "error": {
-      "cannot_connect": "Couldn't reach the Skylight API. Try again in a moment.",
-      "invalid_auth": "That code was rejected — codes expire in about 30 seconds. Click the link again to get a fresh one.",
+      "invalid_auth": "Wrong email or password. Check them in the Skylight app and try again.",
+      "code_rejected": "That code was rejected. Codes expire in about 30 seconds, so open the sign-in link again for a fresh one.",
       "invalid_code": "That doesn't look like a Skylight authorization code. Paste the value of `code=` from the address bar (or the whole URL).",
+      "cannot_connect": "Couldn't reach Skylight. Check Home Assistant's internet connection and try again.",
       "no_frames": "No Skylight frames were found on this account."
     },
     "abort": {

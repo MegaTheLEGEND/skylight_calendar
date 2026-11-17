@@ -111,10 +111,12 @@ To update a manual install later, replace the `skylight` folder with the new one
 1. Go to **Settings → Devices & Services → Add Integration** and choose **Skylight**, or use this button:
 
    [![Open your Home Assistant instance and start setting up a new integration.](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=skylight)
-2. Skylight's sign-in page opens. Sign in with your Skylight account and approve access.
+2. Enter the email and password you use in the Skylight app.
 3. If your account has more than one frame, pick the one to add. To add another frame later, run **Add Integration → Skylight** again. Frames that are already set up aren't offered.
 
-Sign-in uses OAuth2 (authorization code with PKCE). Home Assistant stores a refresh token and renews access automatically, so you won't need to sign in again unless you revoke access in your Skylight account.
+**How sign-in works.** Home Assistant signs in on Skylight's own sign-in page for you, over HTTPS, the same way your browser would, and links the account with OAuth2 (authorization code with PKCE). Your password is used once and isn't stored; Home Assistant keeps only the email (to fill it in next time) and a refresh token, which it renews automatically. You won't need to sign in again unless you sign out of Skylight everywhere or revoke access.
+
+If Skylight changes its sign-in page and direct sign-in stops working, setup switches to signing in from your browser instead: open the link it shows, sign in, then copy the `code` from the address bar of the page you land on (or the whole address) and paste it into Home Assistant within about 30 seconds.
 
 ### Polling intervals
 
@@ -543,7 +545,9 @@ data:
 | Problem | What to check |
 |---|---|
 | **Skylight** isn't listed in **Add Integration** | Restart Home Assistant after installing, then refresh the browser page. For a manual install, check that `custom_components/skylight/manifest.json` is directly inside the configuration folder, with no extra folder level (see [Manual installation](#option-b-manual-installation)). |
-| Sign-in fails or keeps returning to the sign-in page | Try another browser or a private window, or clear cookies for `ourskylight.com`. Check that the same account can sign in to the Skylight app. |
+| "Wrong email or password" | Check that the same email and password sign you in to the Skylight app. If you've forgotten the password, reset it from Skylight's sign-in page. |
+| Setup shows a link and asks for a code | Signing in directly didn't work (Skylight may have changed its page). Follow the steps on screen, and please [open an issue](https://github.com/MegaTheLEGEND/skylight_calendar/issues) with the warning from **Settings → System → Logs**. |
+| Browser sign-in keeps returning to the sign-in page | Try another browser or a private window, or clear cookies for `ourskylight.com`. |
 | Calendar shows no events | Events must fall between 14 days ago and 60 days ahead. |
 | A new list doesn't appear | Wait for the next lists poll (2 minutes by default) or reload the integration. |
 | No star sensor or to-do list for someone | They need a full family member profile on the frame, not only a calendar. |

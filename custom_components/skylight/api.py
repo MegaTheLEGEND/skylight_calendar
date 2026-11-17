@@ -1103,9 +1103,10 @@ async def exchange_authorization_code(
     """OAuth2 authorization_code + PKCE exchange used by the config flow.
 
     The Skylight OAuth server only allows one registered redirect URI
-    (``https://ourskylight.com/welcome``), so we always pass that back — the
-    server never actually redirects there during the HA flow; the user copies
-    the ``?code=...`` value out of their browser's address bar.
+    (``https://ourskylight.com/welcome``), so we always pass that back. The
+    code comes from password_login, which reads it from Skylight's redirect to
+    that URI without following it, or from the user pasting it out of their
+    browser's address bar in the fallback step.
     """
     from .const import OAUTH_REDIRECT_URI
 
